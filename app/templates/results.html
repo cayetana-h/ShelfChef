@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Search Results</title>
+</head>
+<body>
+    <h1>Search Results for: {{ ingredients }}</h1>
+
+    {% if recipes %}
+        <ul>
+        {% for recipe in recipes %}
+            <li>
+                <h2>{{ recipe.name }}</h2>
+                <p>Ingredients: {{ recipe.ingredients | join(', ') }}</p>
+                <p>Matching Ingredients: {{ recipe.matches | join(', ') }}</p>
+                <p>Instructions: {{ recipe.instructions }}</p>
+
+                <!-- Save Recipe Form -->
+                <form action="{{ url_for('save_recipe') }}" method="post">
+                    <input type="hidden" name="name" value="{{ recipe.name }}">
+                    <input type="hidden" name="ingredients" value="{{ recipe.ingredients | join(',') }}">
+                    <input type="hidden" name="instructions" value="{{ recipe.instructions }}">
+                    <button type="submit">Save Recipe</button>
+                </form>
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>No recipes found with these ingredients.</p>
+    {% endif %}
+
+    <a href="/">Back to search</a> | <a href="{{ url_for('my_recipes') }}">My Recipes</a>
+</body>
+</html>

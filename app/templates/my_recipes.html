@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My Recipes</title>
+</head>
+<body>
+    <h1>My Saved Recipes</h1>
+    {% if recipes %}
+        <ul>
+        {% for recipe in recipes %}
+            <li>
+                <h2>{{ recipe.name }}</h2>
+                <p>Ingredients: {{ recipe.ingredients | join(', ') }}</p>
+                <p>Instructions: {{ recipe.instructions }}</p>
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>You haven't saved any recipes yet.</p>
+    {% endif %}
+    <a href="/">Back to search</a>
+</body>
+</html>
