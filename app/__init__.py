@@ -1,9 +1,8 @@
 from flask import Flask
 
 def create_app():
-    app = Flask(__name__)  # Flask automatically finds app/templates
+    app = Flask(__name__)  
 
-    # Import and initialize routes
     from .routes import init_routes
     init_routes(app)
 

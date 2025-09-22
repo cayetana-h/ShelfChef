@@ -7,21 +7,33 @@
 <body>
     <h1>Search Results for: {{ ingredients }}</h1>
 
+    <!-- sorting Options -->
+    <form method="get" action="{{ url_for('results') }}">
+        <input type="hidden" name="ingredients" value="{{ ingredients }}">
+        <label for="sort_by">Sort by:</label>
+        <select name="sort_by" id="sort_by">
+            <option value="weighted" {% if sort_by == 'weighted' %}selected{% endif %}>Weighted (default)</option>
+            <option value="matches" {% if sort_by == 'matches' %}selected{% endif %}>Most Matches</option>
+            <option value="missing" {% if sort_by == 'missing' %}selected{% endif %}>Least Missing Ingredients</option>
+        </select>
+        <button type="submit">Sort</button>
+    </form>
+
     {% if recipes %}
         <ul>
         {% for recipe in recipes %}
             <li>
                 <h2>{{ recipe.name }}</h2>
-                <p>Ingredients: {{ recipe.ingredients | join(', ') }}</p>
-                <p>Matching Ingredients: {{ recipe.matches | join(', ') }}</p>
-                <p>Instructions: {{ recipe.instructions }}</p>
 
-                <!-- Save Recipe Form -->
-                <form action="{{ url_for('save_recipe') }}" method="post">
-                    <input type="hidden" name="name" value="{{ recipe.name }}">
-                    <input type="hidden" name="ingredients" value="{{ recipe.ingredients | join(',') }}">
-                    <input type="hidden" name="instructions" value="{{ recipe.instructions }}">
-                    <button type="submit">Save Recipe</button>
+                {% if recipe.image %}
+                    <img src="{{ recipe.image }}" alt="{{ recipe.name }}" width="200">
+                {% endif %}
+
+                <p>Matching Ingredients: {{ recipe.matches | join(', ') }}</p>
+                <p>Missing Ingredients: {{ recipe.missing_count }}</p>
+
+                <form action="{{ url_for('recipe_detail', recipe_id=recipe.id) }}" method="get">
+                    <button type="submit">See Full Recipe</button>
                 </form>
             </li>
         {% endfor %}

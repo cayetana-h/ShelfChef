@@ -1,12 +1,6 @@
 from flask import render_template, request, redirect, url_for
 from .storage import get_user_recipes, save_user_recipe
-
-# Dummy recipes for search results
-RECIPES = [
-    {"name": "Pasta", "ingredients": ["pasta", "tomato", "cheese"], "instructions": "Boil pasta. Add sauce."},
-    {"name": "Salad", "ingredients": ["lettuce", "tomato", "cucumber"], "instructions": "Mix all ingredients."},
-    {"name": "Omelette", "ingredients": ["eggs", "cheese", "milk"], "instructions": "Beat eggs, cook in pan, add cheese."}
-]
+from .api_client import search_recipes, get_recipe_details  
 
 def init_routes(app):
     @app.route('/')
@@ -16,17 +10,35 @@ def init_routes(app):
     @app.route('/results')
     def results():
         ingredients = request.args.get("ingredients", "")
+        sort_by = request.args.get("sort_by", "weighted")  # default ranking
         user_ingredients = [i.strip().lower() for i in ingredients.split(",")]
 
-        matching_recipes = []
-        for r in RECIPES:
-            matches = set(user_ingredients) & set([i.lower() for i in r["ingredients"]])
-            if matches:
-                r_copy = r.copy()
-                r_copy["matches"] = list(matches)
-                matching_recipes.append(r_copy)
+        recipes = []
+        for r in search_recipes(user_ingredients):
+            matches = set(user_ingredients) & set([i.lower() for i in r.get("ingredients", [])])
+            missing_count = len(r.get("ingredients", [])) - len(matches)
+            r_copy = r.copy()
+            r_copy["matches"] = list(matches)
+            r_copy["missing_count"] = missing_count
+            recipes.append(r_copy)
 
-        return render_template("results.html", recipes=matching_recipes, ingredients=ingredients)
+        # ranking options
+        if sort_by == "matches":
+            recipes.sort(key=lambda x: len(x["matches"]), reverse=True)
+        elif sort_by == "missing":
+            recipes.sort(key=lambda x: x["missing_count"])
+        else:  # weighted (default)
+            recipes.sort(key=lambda x: 2*len(x["matches"]) - x["missing_count"], reverse=True)
+
+        return render_template("results.html", recipes=recipes, ingredients=ingredients, sort_by=sort_by)
+
+    @app.route('/recipe/<int:recipe_id>')
+    def recipe_detail(recipe_id):
+        """Showing full recipe information from API"""
+        recipe = get_recipe_details(recipe_id)
+        if not recipe:
+            return "Recipe not found", 404
+        return render_template("recipe_detail.html", recipe=recipe)
 
     @app.route('/my_recipes')
     def my_recipes():

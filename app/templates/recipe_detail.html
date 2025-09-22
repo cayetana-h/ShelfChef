@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ recipe.name }}</title>
+</head>
+<body>
+    <h1>{{ recipe.name }}</h1>
+
+    {% if recipe.image %}
+        <img src="{{ recipe.image }}" alt="{{ recipe.name }}" width="300">
+    {% endif %}
+
+    <h2>Ingredients:</h2>
+    <ul>
+        {% for ing in recipe.ingredients %}
+            <li>{{ ing }}</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Instructions:</h2>
+    <p>{{ recipe.instructions | safe }}</p>
+
+    <form action="{{ url_for('save_recipe') }}" method="post">
+        <input type="hidden" name="name" value="{{ recipe.name }}">
+        <input type="hidden" name="ingredients" value="{{ recipe.ingredients | join(',') }}">
+        <input type="hidden" name="instructions" value="{{ recipe.instructions }}">
+        <button type="submit">Save Recipe</button>
+    </form>
+
+    <a href="{{ url_for('results', ingredients='') }}">Back to results</a> | <a href="/">Home</a>
+</body>
+</html>

@@ -1,0 +1,37 @@
+{
+  "results": [
+    {
+      "id": 639957,
+      "title": "Colorful Tomato and Spinach Seafood Pasta",
+      "image": "https://img.spoonacular.com/recipes/639957-312x231.jpg",
+      "imageType": "jpg"
+    },
+    {
+      "id": 637897,
+      "title": "Chicken and Chickpea Chili",
+      "image": "https://img.spoonacular.com/recipes/637897-312x231.jpg",
+      "imageType": "jpg"
+    },
+    {
+      "id": 638236,
+      "title": "Chicken Pasta Primavera - Flower Patch Farmgirl Style",
+      "image": "https://img.spoonacular.com/recipes/638236-312x231.jpg",
+      "imageType": "jpg"
+    },
+    {
+      "id": 1165787,
+      "title": "Instant Pot Chili Mac",
+      "image": "https://img.spoonacular.com/recipes/1165787-312x231.jpg",
+      "imageType": "jpg"
+    },
+    {
+      "id": 638272,
+      "title": "Chicken Ragu w Rigatoni",
+      "image": "https://img.spoonacular.com/recipes/638272-312x231.jpg",
+      "imageType": "jpg"
+    }
+  ],
+  "offset": 0,
+  "number": 5,
+  "totalResults": 14
+}
