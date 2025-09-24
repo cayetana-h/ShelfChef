@@ -3,13 +3,159 @@
 <head>
     <meta charset="UTF-8">
     <title>ShelfChef - Recipe Suggester</title>
+    <style>
+        .form-container {
+            max-width: 400px;
+        }
+        input[type="text"] {
+            width: 200px;
+        }
+        .chips-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .chip {
+            background-color: #eee;
+            padding: 5px 10px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+        }
+        .chip button {
+            background: none;
+            border: none;
+            margin-left: 5px;
+            cursor: pointer;
+        }
+        #suggestions {
+            border: 1px solid #ccc;
+            display: none;
+            position: absolute;
+            background-color: white;
+            max-height: 150px;
+            overflow-y: auto;
+            width: 200px;
+            padding: 0;
+            margin: 0;
+            list-style-type: none;
+            z-index: 1000;
+        }
+        #suggestions li {
+            padding: 5px;
+            cursor: pointer;
+        }
+        #suggestions li:hover {
+            background-color: #ddd;
+        }
+    </style>
 </head>
 <body>
     <h1>Welcome to ShelfChef!</h1>
-    <form action="/results" method="get">
-        <label for="ingredients">Enter ingredients (comma-separated):</label>
-        <input type="text" id="ingredients" name="ingredients">
-        <button type="submit">Search Recipes</button>
-    </form>
+
+    <div class="form-container">
+        <form id="ingredient-form" action="/results" method="get">
+            <label for="ingredient-input">Add ingredient:</label><br>
+            <input type="text" id="ingredient-input" autocomplete="off">
+            <button type="button" id="add-btn">+</button>
+            <ul id="suggestions"></ul>
+            <div class="chips-container" id="chips-container"></div>
+            <input type="hidden" name="ingredients" id="hidden-ingredients">
+            <br><br>
+            <button type="submit">Search Recipes</button>
+        </form>
+    </div>
+
+    <br>
+    <a href="{{ url_for('my_recipes') }}">
+        <button type="button">Go to My Recipes</button>
+    </a>
+
+    <script>
+        const input = document.getElementById("ingredient-input");
+        const addBtn = document.getElementById("add-btn");
+        const chipsContainer = document.getElementById("chips-container");
+        const hiddenInput = document.getElementById("hidden-ingredients");
+        const suggestions = document.getElementById("suggestions");
+
+        let ingredients = [];
+
+        function updateHiddenInput() {
+            hiddenInput.value = ingredients.join(",");
+        }
+
+        function addChip(ingredient) {
+            if(!ingredient || ingredients.includes(ingredient.toLowerCase())) return;
+            ingredients.push(ingredient.toLowerCase());
+            updateHiddenInput();
+
+            const chip = document.createElement("div");
+            chip.className = "chip";
+            chip.textContent = ingredient;
+
+            const removeBtn = document.createElement("button");
+            removeBtn.textContent = "x";
+            removeBtn.onclick = () => {
+                chipsContainer.removeChild(chip);
+                ingredients = ingredients.filter(i => i !== ingredient.toLowerCase());
+                updateHiddenInput();
+            };
+
+            chip.appendChild(removeBtn);
+            chipsContainer.appendChild(chip);
+            input.value = "";
+            suggestions.style.display = "none";
+        }
+
+        addBtn.addEventListener("click", () => {
+            addChip(input.value.trim());
+        });
+
+        input.addEventListener("keydown", e => {
+            if(e.key === "Enter") {
+                e.preventDefault();
+                addChip(input.value.trim());
+            }
+        });
+
+        // Fetch suggestions
+        let timer;
+        input.addEventListener("input", () => {
+            clearTimeout(timer);
+            const query = input.value.trim();
+            if(!query) {
+                suggestions.style.display = "none";
+                return;
+            }
+            timer = setTimeout(async () => {
+                try {
+                    const res = await fetch(`/ingredient_suggestions?query=${query}`);
+                    const data = await res.json();
+                    if(!data.length) {
+                        suggestions.style.display = "none";
+                        return;
+                    }
+                    suggestions.innerHTML = data.map(item => `<li class="suggestion-item">${item}</li>`).join('');
+                    suggestions.style.display = "block";
+                } catch(err) {
+                    console.error(err);
+                    suggestions.style.display = "none";
+                }
+            }, 200);
+        });
+
+        suggestions.addEventListener("click", e => {
+            if(e.target.classList.contains("suggestion-item")){
+                addChip(e.target.textContent);
+            }
+        });
+
+        document.addEventListener("click", e => {
+            if(!suggestions.contains(e.target) && e.target !== input){
+                suggestions.style.display = "none";
+            }
+        });
+    </script>
 </body>
 </html>
