@@ -1,6 +1,6 @@
-from flask import render_template, request, redirect, url_for
+from flask import render_template, request, redirect, url_for, jsonify
 from .storage import get_user_recipes, save_user_recipe
-from .api_client import search_recipes, get_recipe_details  
+from .api_client import search_recipes, get_recipe_details, get_ingredient_suggestions
 
 def init_routes(app):
     @app.route('/')
@@ -11,7 +11,7 @@ def init_routes(app):
     def results():
         ingredients = request.args.get("ingredients", "")
         sort_by = request.args.get("sort_by", "weighted")  # default ranking
-        user_ingredients = [i.strip().lower() for i in ingredients.split(",")]
+        user_ingredients = [i.strip().lower() for i in ingredients.split(",") if i.strip()]
 
         recipes = []
         for r in search_recipes(user_ingredients):
@@ -38,7 +38,16 @@ def init_routes(app):
         recipe = get_recipe_details(recipe_id)
         if not recipe:
             return "Recipe not found", 404
-        return render_template("recipe_detail.html", recipe=recipe)
+
+        ingredients = request.args.get("ingredients", "")
+        sort_by = request.args.get("sort_by", "weighted")
+
+        return render_template(
+            "recipe_detail.html",
+            recipe=recipe,
+            ingredients=ingredients,
+            sort_by=sort_by
+        )
 
     @app.route('/my_recipes')
     def my_recipes():
@@ -53,3 +62,10 @@ def init_routes(app):
         if name and ingredients and instructions:
             save_user_recipe(name, ingredients, instructions)
         return redirect(url_for('my_recipes'))
+
+    @app.route("/ingredient_suggestions")
+    def ingredient_suggestions():
+        query = request.args.get("query", "").strip()
+        suggestions = get_ingredient_suggestions(query)
+        return jsonify(suggestions)
+
