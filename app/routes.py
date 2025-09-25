@@ -1,6 +1,9 @@
-from flask import render_template, request, redirect, url_for, jsonify
+from flask import render_template, request, redirect, url_for, jsonify, session  # added session
 from .storage import get_user_recipes, save_user_recipe
 from .api_client import search_recipes, get_recipe_details, get_ingredient_suggestions
+
+recipe_cache = {}
+
 
 def init_routes(app):
     @app.route('/')
@@ -9,45 +12,62 @@ def init_routes(app):
 
     @app.route('/results')
     def results():
-        ingredients = request.args.get("ingredients", "")
-        sort_by = request.args.get("sort_by", "weighted")  # default ranking
-        user_ingredients = [i.strip().lower() for i in ingredients.split(",") if i.strip()]
+        ingredients = request.args.get("ingredients")
+        sort_by = request.args.get("sort_by", "weighted")
 
-        recipes = []
-        for r in search_recipes(user_ingredients):
-            matches = set(user_ingredients) & set([i.lower() for i in r.get("ingredients", [])])
-            missing_count = len(r.get("ingredients", [])) - len(matches)
-            r_copy = r.copy()
-            r_copy["matches"] = list(matches)
-            r_copy["missing_count"] = missing_count
-            recipes.append(r_copy)
+        if ingredients:
+            user_ingredients = [i.strip().lower() for i in ingredients.split(",") if i.strip()]
+            key = tuple(sorted(user_ingredients))
 
-        # ranking options
-        if sort_by == "matches":
-            recipes.sort(key=lambda x: len(x["matches"]), reverse=True)
-        elif sort_by == "missing":
-            recipes.sort(key=lambda x: x["missing_count"])
-        else:  # weighted (default)
-            recipes.sort(key=lambda x: 2*len(x["matches"]) - x["missing_count"], reverse=True)
+            # check cache first
+            if key in recipe_cache:
+                recipes = recipe_cache[key]
+            else:
+                recipes = []
+                for r in search_recipes(user_ingredients):
+                    matches = set(user_ingredients) & set([i.lower() for i in r.get("ingredients", [])])
+                    missing_count = len(r.get("ingredients", [])) - len(matches)
+                    r_copy = r.copy()
+                    r_copy["matches"] = list(matches)
+                    r_copy["missing_count"] = missing_count
+                    recipes.append(r_copy)
 
-        return render_template("results.html", recipes=recipes, ingredients=ingredients, sort_by=sort_by)
+                # store in cache
+                recipe_cache[key] = recipes
+
+            # ranking
+            sort_by = sort_by or "weighted"
+            if sort_by == "matches":
+                recipes.sort(key=lambda x: len(x["matches"]), reverse=True)
+            elif sort_by == "missing":
+                recipes.sort(key=lambda x: x["missing_count"])
+            else:
+                recipes.sort(key=lambda x: 2*len(x["matches"]) - x["missing_count"], reverse=True)
+
+        else:
+            # fallback if no ingredients param
+            recipes = []
+
+        return render_template("results.html", recipes=recipes, ingredients=ingredients or "", sort_by=sort_by)
+
 
     @app.route('/recipe/<int:recipe_id>')
     def recipe_detail(recipe_id):
-        """Showing full recipe information from API"""
         recipe = get_recipe_details(recipe_id)
         if not recipe:
             return "Recipe not found", 404
 
-        ingredients = request.args.get("ingredients", "")
+        # pass original search ingredients and sort_by to template
+        ingredients = request.args.get("ingredients", "")  # original search ingredients
         sort_by = request.args.get("sort_by", "weighted")
 
         return render_template(
             "recipe_detail.html",
             recipe=recipe,
-            ingredients=ingredients,
+            ingredients=ingredients,  # this is key
             sort_by=sort_by
         )
+
 
     @app.route('/my_recipes')
     def my_recipes():
@@ -68,4 +88,3 @@ def init_routes(app):
         query = request.args.get("query", "").strip()
         suggestions = get_ingredient_suggestions(query)
         return jsonify(suggestions)
-
