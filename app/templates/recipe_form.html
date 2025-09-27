@@ -3,23 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <title>{% if recipe %}Edit Recipe{% else %}New Recipe{% endif %}</title>
+    <style>
+        .tag { display: inline-block; background: #eee; padding: 5px 10px; margin: 3px; border-radius: 5px; }
+        .tag input { border: none; background: transparent; width: auto; }
+        .remove-tag { cursor: pointer; margin-left: 5px; color: red; }
+        .instruction-step { margin-bottom: 5px; }
+    </style>
 </head>
 <body>
     <h1>{% if recipe %}Edit Recipe{% else %}Create New Recipe{% endif %}</h1>
 
-    <form method="post">
+    <form method="post" id="recipeForm">
         <label for="name">Name:</label><br>
         <input type="text" id="name" name="name" value="{{ recipe.name if recipe else '' }}" required><br><br>
 
-        <label for="ingredients">Ingredients (comma-separated):</label><br>
-        <textarea id="ingredients" name="ingredients" required>{{ recipe.ingredients | join(', ') if recipe else '' }}</textarea><br><br>
+        <label>Ingredients:</label><br>
+        <div id="ingredient-tags">
+            {% if recipe %}
+                {% for ing in recipe.ingredients %}
+                    <span class="tag">{{ ing }}<span class="remove-tag">x</span></span>
+                {% endfor %}
+            {% endif %}
+            <input type="text" id="ingredient-input" placeholder="Type ingredient and press Enter">
+        </div>
+        <input type="hidden" name="ingredients" id="ingredients-hidden">
+        <br><br>
 
-        <label for="instructions">Instructions:</label><br>
-        <textarea id="instructions" name="instructions" required>{{ recipe.instructions if recipe else '' }}</textarea><br><br>
+        <label>Instructions:</label><br>
+        <div id="instructions-container">
+            {% if recipe %}
+                {% for step in recipe.instructions.split('\n') %}
+                    <div class="instruction-step">
+                        <input type="text" name="instructions[]" value="{{ step.split('. ', 1)[1] if '. ' in step else step }}" required>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="instruction-step"><input type="text" name="instructions[]" placeholder="Step 1" required></div>
+                <div class="instruction-step"><input type="text" name="instructions[]" placeholder="Step 2" required></div>
+            {% endif %}
+        </div>
+        <button type="button" id="add-step">+ Add Step</button>
+        <br><br>
 
         <button type="submit">{% if recipe %}Update{% else %}Save{% endif %}</button>
     </form>
 
     <a href="{{ url_for('my_recipes') }}">⬅ Back to My Recipes</a>
+
+    <script>
+        const ingredientInput = document.getElementById('ingredient-input');
+        const tagsContainer = document.getElementById('ingredient-tags');
+        const hiddenIngredients = document.getElementById('ingredients-hidden');
+
+        function updateHiddenIngredients() {
+            const tags = Array.from(tagsContainer.querySelectorAll('.tag')).map(tag => tag.firstChild.textContent);
+            hiddenIngredients.value = tags.join(',');
+        }
+
+        tagsContainer.addEventListener('click', function(e) {
+            if (e.target.classList.contains('remove-tag')) {
+                e.target.parentElement.remove();
+                updateHiddenIngredients();
+            }
+        });
+
+        ingredientInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && ingredientInput.value.trim() !== '') {
+                e.preventDefault();
+                const tag = document.createElement('span');
+                tag.className = 'tag';
+                tag.innerHTML = ingredientInput.value.trim() + '<span class="remove-tag">x</span>';
+                tagsContainer.insertBefore(tag, ingredientInput);
+                ingredientInput.value = '';
+                updateHiddenIngredients();
+            }
+        });
+
+        document.getElementById('add-step').addEventListener('click', function() {
+            const div = document.createElement('div');
+            div.className = 'instruction-step';
+            div.innerHTML = '<input type="text" name="instructions[]" placeholder="Step" required>';
+            document.getElementById('instructions-container').appendChild(div);
+        });
+
+        
+        updateHiddenIngredients();
+    </script>
 </body>
 </html>

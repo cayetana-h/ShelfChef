@@ -77,14 +77,19 @@ def init_routes(app):
     @app.route('/my_recipes/new', methods=['GET', 'POST'])
     def new_recipe():
         if request.method == 'POST':
-            name = request.form.get("name")
+            name = request.form.get("name", "").title().strip()
+
             ingredients = [i.strip() for i in request.form.get("ingredients", "").split(",") if i.strip()]
-            instructions = request.form.get("instructions")
+
+            steps = request.form.getlist("instructions[]")
+            instructions = "\n".join(f"{i+1}. {step.strip()}" for i, step in enumerate(steps) if step.strip())
+
             if name and ingredients and instructions:
-                # user-created recipe
                 save_user_recipe(name, ingredients, instructions, source="user", api_id=None)
             return redirect(url_for('my_recipes'))
+
         return render_template("recipe_form.html", recipe=None)
+
 
     @app.route('/my_recipes/<int:recipe_id>/edit', methods=['GET', 'POST'])
     def edit_recipe(recipe_id):
@@ -92,21 +97,23 @@ def init_routes(app):
         if not recipe:
             return "Recipe not found", 404
 
-        # block editing if not user-created
         if recipe.get("source") != "user":
             return "Editing is not allowed for recipes saved from the API.", 403
 
         if request.method == 'POST':
-            name = request.form.get("name")
+            name = request.form.get("name", "").title().strip()
             ingredients = [i.strip() for i in request.form.get("ingredients", "").split(",") if i.strip()]
-            instructions = request.form.get("instructions")
+            steps = request.form.getlist("instructions[]")
+            instructions = "\n".join(f"{i+1}. {step.strip()}" for i, step in enumerate(steps) if step.strip())
+
             updated = update_user_recipe(recipe_id, name, ingredients, instructions)
             if not updated:
-                # either not found or not allowed
                 return "Unable to update recipe.", 400
             return redirect(url_for('my_recipes'))
 
-        return render_template("recipe_form.html", recipe=recipe)
+        recipe_steps = recipe["instructions"].split("\n") if recipe.get("instructions") else []
+        return render_template("recipe_form.html", recipe=recipe, recipe_steps=recipe_steps)
+
 
     @app.route('/my_recipes/<int:recipe_id>/delete', methods=['POST'])
     def delete_recipe(recipe_id):
