@@ -6,19 +6,34 @@
 </head>
 <body>
     <h1>My Saved Recipes</h1>
+
+    <a href="{{ url_for('new_recipe') }}">➕ Create New Recipe</a>
+
     {% if recipes %}
         <ul>
         {% for recipe in recipes %}
             <li>
                 <h2>{{ recipe.name }}</h2>
-                <p>Ingredients: {{ recipe.ingredients | join(', ') }}</p>
-                <p>Instructions: {{ recipe.instructions }}</p>
+                <p><strong>Ingredients:</strong> {{ recipe.ingredients | join(', ') }}</p>
+                <p><strong>Instructions:</strong> {{ recipe.instructions }}</p>
+                <p><em>Saved from: {{ recipe.source }}</em></p>
+
+                {% if recipe.source == 'user' %}
+                    <a href="{{ url_for('edit_recipe', recipe_id=recipe.id) }}">✏️ Edit</a>
+                {% else %}
+                    <span title="API-sourced recipes cannot be edited">✏️ Edit (disabled)</span>
+                {% endif %}
+
+                <form action="{{ url_for('delete_recipe', recipe_id=recipe.id) }}" method="post" style="display:inline;">
+                    <button type="submit" onclick="return confirm('Are you sure you want to delete this recipe?');">🗑️ Delete</button>
+                </form>
             </li>
         {% endfor %}
         </ul>
     {% else %}
         <p>You haven't saved any recipes yet.</p>
     {% endif %}
-    <a href="/">Back to search</a>
+
+    <a href="/">⬅ Back to search</a>
 </body>
 </html>
