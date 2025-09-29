@@ -32,7 +32,6 @@
                 <p>Matching Ingredients: {{ recipe.matches | join(', ') }}</p>
                 <p>Missing Ingredients: {{ recipe.missing_count }}</p>
 
-                <!-- Pass original ingredients and sort_by as query params -->
                 <form action="{{ url_for('recipe_detail', recipe_id=recipe.id) }}" method="get">
                     <input type="hidden" name="ingredients" value="{{ ingredients }}">
                     <input type="hidden" name="sort_by" value="{{ sort_by }}">
