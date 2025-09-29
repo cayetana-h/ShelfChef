@@ -122,7 +122,6 @@ def test_delete_user_recipe_success(in_memory_db):
     deleted = storage.delete_user_recipe(rid)
     assert deleted is True
     
-    # Verify it's actually gone
     assert storage.get_user_recipe(rid) is None
 
 
