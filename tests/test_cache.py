@@ -1,7 +1,5 @@
-# tests/test_cache.py
 import pytest
 
-# simulate the cache storage (normally session)
 class FakeCache:
     def __init__(self):
         self.store = {}
@@ -12,10 +10,11 @@ class FakeCache:
     def get(self, key, default=None):
         return self.store.get(key, default)
 
+
+# ---------- Basic store and retrieve ----------
 def test_cache_store_and_retrieve():
     cache = FakeCache()
 
-    # simulate storing search results
     recipes = [{"id": 1, "name": "Pizza"}, {"id": 2, "name": "Salad"}]
     ingredients = "cheese,tomato"
     sort_by = "weighted"
@@ -24,10 +23,44 @@ def test_cache_store_and_retrieve():
     cache.set("last_ingredients", ingredients)
     cache.set("last_sort", sort_by)
 
-    # now retrieve
     assert cache.get("last_results") == recipes
     assert cache.get("last_ingredients") == ingredients
     assert cache.get("last_sort") == sort_by
 
-    # missing keys should return default
     assert cache.get("unknown_key", 42) == 42
+
+
+# ---------- Overwriting existing values ----------
+def test_cache_overwrite():
+    cache = FakeCache()
+    cache.set("key", "value1")
+    cache.set("key", "value2")
+    assert cache.get("key") == "value2"
+
+
+# ---------- Storing different types ----------
+def test_cache_various_types():
+    cache = FakeCache()
+    cache.set("int", 123)
+    cache.set("list", [1,2,3])
+    cache.set("dict", {"a": 1})
+    
+    assert cache.get("int") == 123
+    assert cache.get("list") == [1,2,3]
+    assert cache.get("dict") == {"a": 1}
+
+
+# ---------- Clearing the cache ----------
+def test_cache_clear():
+    cache = FakeCache()
+    cache.set("key", "value")
+    cache.store.clear()
+    assert cache.get("key") is None
+
+
+# ---------- Default values for missing keys ----------
+def test_cache_default_for_missing():
+    cache = FakeCache()
+    assert cache.get("missing", default="default") == "default"
+    assert cache.get("missing_list", default=[]) == []
+    assert cache.get("missing_dict", default={"x":1}) == {"x":1}

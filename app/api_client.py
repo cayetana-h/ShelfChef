@@ -9,18 +9,22 @@ INGREDIENT_AUTOCOMPLETE_URL = "https://api.spoonacular.com/food/ingredients/auto
 ingredient_cache = {}
 
 def normalize_ingredient(ingredient):
-    """Normalize ingredient text: lowercase, trim, singularize simple plurals."""
     ing = ingredient.lower().strip()
-    if ing.endswith("s") and len(ing) > 3:
+
+    if ing.endswith("ies") and len(ing) > 4:   # e.g., "berries" -> "berry"
+        ing = ing[:-3] + "y"
+    elif ing.endswith("oes") and len(ing) > 4:  # e.g., "tomatoes" -> "tomato"
+        ing = ing[:-2]
+    elif ing.endswith("es") and len(ing) > 3:   # e.g., "dishes" -> "dish"
+        ing = ing[:-2]
+    elif ing.endswith("s") and len(ing) > 3:    # fallback: "apples" -> "apple"
         ing = ing[:-1]
+
     return ing
 
+
 def search_recipes(user_ingredients):
-    """
-    Search recipes using Spoonacular's findByIngredients endpoint.
-    Returns a list of recipes with name, ingredients, instructions, 
-    missing ingredients count, and source URL.
-    """
+
     normalized_ingredients = [normalize_ingredient(i) for i in user_ingredients if i.strip()]
     ingredients_str = ",".join(normalized_ingredients)
     params = {
