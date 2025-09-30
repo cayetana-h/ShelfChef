@@ -182,3 +182,68 @@ def test_ingredient_suggestions(monkeypatch, client):
     assert resp.status_code == 200
     assert b"salt" in resp.data
     assert b"sugar" in resp.data
+
+
+
+# ---------- Edge Cases / Cache & Error Handling ----------
+
+def test_recipe_detail_not_found(monkeypatch, client):
+    monkeypatch.setattr(routes_module, "get_recipe_details", lambda rid: None)
+    resp = client.get("/recipe/999")
+    assert resp.status_code == 404
+    assert b"Recipe not found" in resp.data
+
+
+def test_edit_recipe_not_found(monkeypatch, client):
+    monkeypatch.setattr(routes_module, "get_user_recipe", lambda rid: None)
+    resp = client.get("/my_recipes/123/edit")
+    assert resp.status_code == 404
+    assert b"Recipe not found" in resp.data
+
+
+def test_edit_recipe_forbidden(monkeypatch, client):
+    monkeypatch.setattr(
+        routes_module,
+        "get_user_recipe",
+        lambda rid: {"id": rid, "source": "api", "instructions": "Step 1"}
+    )
+    resp = client.get("/my_recipes/123/edit")
+    assert resp.status_code == 403
+    assert b"not allowed" in resp.data.lower()
+
+
+def test_edit_recipe_update_fails(monkeypatch, client):
+    monkeypatch.setattr(
+        routes_module,
+        "get_user_recipe",
+        lambda rid: {"id": rid, "source": "user", "instructions": "Step 1"}
+    )
+    monkeypatch.setattr(routes_module, "update_user_recipe", lambda *a, **kw: False)
+
+    resp = client.post(
+        "/my_recipes/123/edit",
+        data={"name": "Test", "ingredients": "cheese", "instructions[]": "Bake"},
+    )
+    assert resp.status_code == 400
+    assert b"Unable to update recipe" in resp.data
+
+
+def test_results_cache_reuse(monkeypatch, client):
+    called = {"count": 0}
+
+    def fake_search(user_ingredients):
+        called["count"] += 1
+        return [{"id": 1, "name": "Pizza", "ingredients": ["cheese", "tomato"]}]
+
+    monkeypatch.setattr(routes_module, "search_recipes", fake_search)
+
+    routes_module.recipe_cache.clear()
+
+    resp1 = client.get("/results?ingredients=cheese,tomato")
+    assert resp1.status_code == 200
+    assert called["count"] == 1
+
+    resp2 = client.get("/results?ingredients=cheese,tomato")
+    assert resp2.status_code == 200
+    assert called["count"] == 1  
+
