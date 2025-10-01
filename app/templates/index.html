@@ -3,51 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <title>ShelfChef - Recipe Suggester</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #ffffff;
+            color: #333333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #FF6B00;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
         .form-container {
-            max-width: 400px;
+            max-width: 450px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
+
         input[type="text"] {
-            width: 200px;
+            width: 70%;
+            padding: 8px 12px;
+            border: 2px solid #FF6B00;
+            border-radius: 6px;
+            margin-right: 5px;
+            outline: none;
+            transition: border 0.2s;
         }
+
+        input[type="text"]:focus {
+            border-color: #FF8C42;
+        }
+
+        button {
+            background-color: #FF6B00;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 14px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        button:hover {
+            background-color: #FF8C42;
+            transform: scale(1.05);
+        }
+
         .chips-container {
             display: flex;
             flex-wrap: wrap;
-            gap: 5px;
-            margin-top: 10px;
+            gap: 8px;
+            margin-top: 15px;
         }
+
         .chip {
-            background-color: #eee;
-            padding: 5px 10px;
-            border-radius: 15px;
+            background-color: #fff4e6;
+            border: 1px solid #FF6B00;
+            padding: 6px 12px;
+            border-radius: 20px;
             display: flex;
             align-items: center;
+            font-size: 14px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
         }
+
+        .chip:hover {
+            transform: scale(1.05);
+        }
+
         .chip button {
             background: none;
             border: none;
-            margin-left: 5px;
+            margin-left: 6px;
             cursor: pointer;
+            color: #FF6B00;
+            font-weight: bold;
         }
+
         #suggestions {
-            border: 1px solid #ccc;
+            border: 1px solid #FF6B00;
             display: none;
             position: absolute;
-            background-color: white;
+            background-color: #ffffff;
             max-height: 150px;
             overflow-y: auto;
-            width: 200px;
+            width: 70%;
             padding: 0;
             margin: 0;
             list-style-type: none;
             z-index: 1000;
+            border-radius: 6px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
+
         #suggestions li {
-            padding: 5px;
+            padding: 8px 12px;
             cursor: pointer;
+            transition: background 0.2s;
         }
+
         #suggestions li:hover {
-            background-color: #ddd;
+            background-color: #fff4e6;
+        }
+
+        a button {
+            margin-top: 15px;
+            width: 100%;
         }
     </style>
 </head>
