@@ -1,15 +1,18 @@
     # ---------- FOR ROUTES.PY  ----------
 
 def normalize_ingredients(raw_ingredients: str):
+    """"normalizing user input ingredients"""
     ingredients = [i.strip().lower() for i in raw_ingredients.split(",") if i.strip()]
     return sorted(ingredients)
 
 
 def build_cache_key(ingredients_list):
+    """ creating a hashable cache key from user ingredients to store/retrieve search results"""
     return tuple(ingredients_list)
 
 
 def matching_missing_for_recipe(user_ingredients, recipes):
+    """ adding matches and missing_count to each recipe dict"""
     enriched = []
     for r in recipes:
         matches = set(user_ingredients) & set([i.lower() for i in r.get("ingredients", [])])
@@ -21,13 +24,36 @@ def matching_missing_for_recipe(user_ingredients, recipes):
     return enriched
 
 def sort_recipes(recipes, sort_by="weighted"):
+    """ sorting recipes based on user preference"""
     if sort_by == "matches":
         recipes.sort(key=lambda x: len(x["matches"]), reverse=True)
     elif sort_by == "missing":
         recipes.sort(key=lambda x: x["missing_count"])
     else:
-        recipes.sort(key=lambda x: 2*len(x["matches"]) - x["missing_count"], reverse=True)
+        recipes.sort(key=lambda x: 2*len(x["matches"]) - x["missing_count"], reverse=True) # default 
     return recipes
+
+def validate_recipe_form(name: str, raw_ingredients: str, steps: list):
+    """
+    validation for recipe form inputs
+    """
+    ingredients = normalize_ingredients(raw_ingredients)
+    instructions = format_instructions(steps)
+
+    valid, msg = validate_name(name)
+    if not valid:
+        return False, msg, ingredients, instructions
+
+    valid, msg = validate_ingredients(ingredients)
+    if not valid:
+        return False, msg, ingredients, instructions
+
+    valid, msg = validate_instructions(instructions)
+    if not valid:
+        return False, msg, ingredients, instructions
+
+    return True, "", ingredients, instructions
+
 
 
     # ---------- MAINLY FOR MY RECIPES CRUD IN REOUTES.PY----------

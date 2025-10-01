@@ -5,8 +5,9 @@ from .storage import (
     )
 from .api_client import search_recipes, get_recipe_details, get_ingredient_suggestions
 from .utils import (
-    normalize_ingredients, build_cache_key, matching_missing_for_recipe, sort_recipes, 
-    validate_name, validate_ingredients, validate_instructions, format_instructions
+    normalize_ingredients, build_cache_key, matching_missing_for_recipe, 
+    sort_recipes, validate_name, validate_ingredients, validate_instructions, 
+    format_instructions, validate_recipe_form
     )
 
 recipe_cache = {}
@@ -77,30 +78,18 @@ def init_routes(app):
         """
         handles both displaying the form and processing form submissions for new recipes
         """
-        if request.method == 'POST':
+        if request.method == "POST":
             name = request.form.get("name", "").title().strip()
             raw_ingredients = request.form.get("ingredients", "")
-            ingredients = normalize_ingredients(raw_ingredients)
             steps = request.form.getlist("instructions[]")
-            instructions = format_instructions(steps)
 
-            valid, msg = validate_name(name)
-            if not valid:
-                flash(msg, "error")
-                return render_template("recipe_form.html", recipe=None)
-
-            valid, msg = validate_ingredients(ingredients)
-            if not valid:
-                flash(msg, "error")
-                return render_template("recipe_form.html", recipe=None)
-
-            valid, msg = validate_instructions(instructions)
+            valid, msg, ingredients, instructions = validate_recipe_form(name, raw_ingredients, steps)
             if not valid:
                 flash(msg, "error")
                 return render_template("recipe_form.html", recipe=None)
 
             save_user_recipe(name, ingredients, instructions, source="user", api_id=None)
-            return redirect(url_for('my_recipes'))
+            return redirect(url_for("my_recipes"))
 
         return render_template("recipe_form.html", recipe=None)
 
@@ -117,24 +106,12 @@ def init_routes(app):
         if recipe.get("source") != "user":
             return "Editing is not allowed for recipes saved from the API.", 403
 
-        if request.method == 'POST':
+        if request.method == "POST":
             name = request.form.get("name", "").title().strip()
             raw_ingredients = request.form.get("ingredients", "")
-            ingredients = normalize_ingredients(raw_ingredients)
             steps = request.form.getlist("instructions[]")
-            instructions = format_instructions(steps)
 
-            valid, msg = validate_name(name)
-            if not valid:
-                flash(msg, "error")
-                return render_template("recipe_form.html", recipe=recipe)
-
-            valid, msg = validate_ingredients(ingredients)
-            if not valid:
-                flash(msg, "error")
-                return render_template("recipe_form.html", recipe=recipe)
-
-            valid, msg = validate_instructions(instructions)
+            valid, msg, ingredients, instructions = validate_recipe_form(name, raw_ingredients, steps)
             if not valid:
                 flash(msg, "error")
                 return render_template("recipe_form.html", recipe=recipe)
@@ -144,7 +121,8 @@ def init_routes(app):
                 flash("Unable to update recipe.", "error")
                 return render_template("recipe_form.html", recipe=recipe)
 
-            return redirect(url_for('my_recipes'))
+            return redirect(url_for("my_recipes"))
+
 
         recipe_steps = recipe.get("instructions", "").split("\n")
         return render_template("recipe_form.html", recipe=recipe, recipe_steps=recipe_steps)
@@ -160,37 +138,24 @@ def init_routes(app):
         """saving a recipe coming from the API to my recipes"""
         name = request.form.get("name", "").title().strip()
         raw_ingredients = request.form.get("ingredients", "")
-
-        ingredients = normalize_ingredients(raw_ingredients)
-        instructions = request.form.get("instructions", "").strip()
-
+        steps = request.form.get("instructions", "").split("\n")
         api_id_raw = request.form.get("api_id")
         api_id = int(api_id_raw) if api_id_raw and api_id_raw.isdigit() else None
 
-        valid, msg = validate_name(name)
-        if not valid:
-            flash(msg, "error")
-            return redirect(request.referrer or url_for('home'))
 
-        valid, msg = validate_ingredients(ingredients)
+        valid, msg, ingredients, instructions = validate_recipe_form(name, raw_ingredients, steps)
         if not valid:
             flash(msg, "error")
-            return redirect(request.referrer or url_for('home'))
-
-        valid, msg = validate_instructions(instructions)
-        if not valid:
-            flash(msg, "error")
-            return redirect(request.referrer or url_for('home'))
+            return redirect(request.referrer or url_for("home"))
 
         save_user_recipe(name, ingredients, instructions, source="api", api_id=api_id)
-
-        return redirect(url_for('my_recipes'))
+        return redirect(url_for("my_recipes"))
 
 
     @app.route("/ingredient_suggestions")
     def ingredient_suggestions():
         """
-        provides ingredient suggestions for autocomplete as JSON
+        provides ingredient suggestions for autocomplete as JSON (autocomplete)
         """
         query = request.args.get("query", "").strip()
         suggestions = get_ingredient_suggestions(query)
