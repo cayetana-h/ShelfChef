@@ -3,21 +3,141 @@
 <head>
     <meta charset="UTF-8">
     <title>{% if recipe %}Edit Recipe{% else %}New Recipe{% endif %}</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-        .tag { display: inline-block; background: #eee; padding: 5px 10px; margin: 3px; border-radius: 5px; }
-        .tag input { border: none; background: transparent; width: auto; }
-        .remove-tag { cursor: pointer; margin-left: 5px; color: red; }
-        .instruction-step { margin-bottom: 5px; }
+        /* Global */
+        *, *::before, *::after {
+            box-sizing: border-box; /* Fix input overflow */
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #ffffff;
+            color: #333333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #FF6B00;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        form {
+            max-width: 500px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 12px;
+            border: 2px solid #FF6B00;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        label {
+            font-weight: 500;
+        }
+
+        /* Text Inputs */
+        input[type="text"], .instruction-step input, #ingredient-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 2px solid #FF6B00;
+            border-radius: 6px;
+            margin-top: 5px;
+            margin-bottom: 15px;
+            outline: none;
+            transition: border 0.2s;
+        }
+
+        input[type="text"]:focus, .instruction-step input:focus, #ingredient-input:focus {
+            border-color: #FF8C42;
+        }
+
+        /* Buttons */
+        button {
+            background-color: #FF6B00;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s, transform 0.2s;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background-color: #FF8C42;
+            transform: scale(1.05);
+        }
+
+        /* Ingredient tags */
+        #ingredient-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .tag {
+            display: flex;
+            align-items: center;
+            background-color: #fff4e6;
+            border: 1px solid #FF6B00;
+            padding: 6px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+
+        .tag:hover {
+            transform: scale(1.05);
+        }
+
+        .remove-tag {
+            cursor: pointer;
+            margin-left: 6px;
+            color: #FF6B00;
+            font-weight: bold;
+        }
+
+        /* Instruction steps */
+        .instruction-step {
+            margin-bottom: 10px;
+        }
+
+        #add-step {
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+
+        /* Back link */
+        a.back-link {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: #FF6B00;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        a.back-link:hover {
+            color: #FF8C42;
+        }
     </style>
 </head>
 <body>
     <h1>{% if recipe %}Edit Recipe{% else %}Create New Recipe{% endif %}</h1>
 
     <form method="post" id="recipeForm">
-        <label for="name">Name:</label><br>
-        <input type="text" id="name" name="name" value="{{ recipe.name if recipe else '' }}" required><br><br>
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" value="{{ recipe.name if recipe else '' }}" required>
 
-        <label>Ingredients:</label><br>
+        <label>Ingredients:</label>
         <div id="ingredient-tags">
             {% if recipe %}
                 {% for ing in recipe.ingredients %}
@@ -27,9 +147,8 @@
             <input type="text" id="ingredient-input" placeholder="Type ingredient and press Enter">
         </div>
         <input type="hidden" name="ingredients" id="ingredients-hidden">
-        <br><br>
 
-        <label>Instructions:</label><br>
+        <label>Instructions:</label>
         <div id="instructions-container">
             {% if recipe %}
                 {% for step in recipe.instructions.split('\n') %}
@@ -43,12 +162,11 @@
             {% endif %}
         </div>
         <button type="button" id="add-step">+ Add Step</button>
-        <br><br>
 
         <button type="submit">{% if recipe %}Update{% else %}Save{% endif %}</button>
     </form>
 
-    <a href="{{ url_for('my_recipes') }}">⬅ Back to My Recipes</a>
+    <a class="back-link" href="{{ url_for('my_recipes') }}">⬅ Back to My Recipes</a>
 
     <script>
         const ingredientInput = document.getElementById('ingredient-input');
@@ -86,7 +204,6 @@
             document.getElementById('instructions-container').appendChild(div);
         });
 
-        
         updateHiddenIngredients();
     </script>
 </body>
