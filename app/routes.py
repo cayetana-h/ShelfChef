@@ -7,6 +7,7 @@ from .storage import (
     delete_user_recipe
 )
 from .api_client import search_recipes, get_recipe_details, get_ingredient_suggestions
+from .utils import normalize_ingredients, build_cache_key, matching_missing_for_recipe, sort_recipes
 
 recipe_cache = {}
 
@@ -17,39 +18,34 @@ def init_routes(app):
 
     @app.route('/results')
     def results():
-        ingredients = request.args.get("ingredients")
+        """ 
+        displays recipe search results based on user ingredients and sort preference
+        
+        """
+        raw_input = request.args.get("ingredients", "")
         sort_by = request.args.get("sort_by", "weighted")
 
-        if ingredients:
-            user_ingredients = [i.strip().lower() for i in ingredients.split(",") if i.strip()]
-            key = tuple(sorted(user_ingredients))
+        if raw_input:
+            user_ingredients = normalize_ingredients(raw_input)
+            key = build_cache_key(user_ingredients)
 
             if key in recipe_cache:
                 recipes = recipe_cache[key]
             else:
-                recipes = []
-                for r in search_recipes(user_ingredients):
-                    matches = set(user_ingredients) & set([i.lower() for i in r.get("ingredients", [])])
-                    missing_count = len(r.get("ingredients", [])) - len(matches)
-                    r_copy = r.copy()
-                    r_copy["matches"] = list(matches)
-                    r_copy["missing_count"] = missing_count
-                    recipes.append(r_copy)
-
+                api_results = search_recipes(user_ingredients)
+                recipes = matching_missing_for_recipe(user_ingredients, api_results)
                 recipe_cache[key] = recipes
 
-            sort_by = sort_by or "weighted"
-            if sort_by == "matches":
-                recipes.sort(key=lambda x: len(x["matches"]), reverse=True)
-            elif sort_by == "missing":
-                recipes.sort(key=lambda x: x["missing_count"])
-            else:
-                recipes.sort(key=lambda x: 2*len(x["matches"]) - x["missing_count"], reverse=True)
-
+            recipes = sort_recipes(recipes, sort_by)
         else:
             recipes = []
 
-        return render_template("results.html", recipes=recipes, ingredients=ingredients or "", sort_by=sort_by)
+        return render_template(
+            "results.html",
+            recipes=recipes,
+            ingredients=raw_input,
+            sort_by=sort_by
+        )
 
     @app.route('/recipe/<int:recipe_id>')
     def recipe_detail(recipe_id):
