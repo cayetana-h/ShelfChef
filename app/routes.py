@@ -1,13 +1,13 @@
-from flask import render_template, request, redirect, url_for, jsonify, session, abort
+from flask import render_template, request, redirect, url_for, jsonify, flash
 from .storage import (
-    get_user_recipes,
-    save_user_recipe,
-    get_user_recipe,
-    update_user_recipe,
-    delete_user_recipe
+    get_user_recipes, save_user_recipe, get_user_recipe,
+    update_user_recipe, delete_user_recipe
 )
 from .api_client import search_recipes, get_recipe_details, get_ingredient_suggestions
-from .utils import normalize_ingredients, build_cache_key, matching_missing_for_recipe, sort_recipes
+from .utils import (
+    normalize_ingredients, build_cache_key, matching_missing_for_recipe, sort_recipes, 
+    validate_name, validate_ingredients, validate_instructions, format_instructions
+    )
 
 recipe_cache = {}
 
@@ -20,7 +20,7 @@ def init_routes(app):
     def results():
         """ 
         displays recipe search results based on user ingredients and sort preference
-        
+
         """
         raw_input = request.args.get("ingredients", "")
         sort_by = request.args.get("sort_by", "weighted")
@@ -72,19 +72,35 @@ def init_routes(app):
 
     @app.route('/my_recipes/new', methods=['GET', 'POST'])
     def new_recipe():
+        """handles both displaying the form and processing form submissions for new recipes"""
         if request.method == 'POST':
             name = request.form.get("name", "").title().strip()
-
-            ingredients = [i.strip() for i in request.form.get("ingredients", "").split(",") if i.strip()]
-
+            raw_ingredients = request.form.get("ingredients", "")
+            ingredients = normalize_ingredients(raw_ingredients)
             steps = request.form.getlist("instructions[]")
-            instructions = "\n".join(f"{i+1}. {step.strip()}" for i, step in enumerate(steps) if step.strip())
+            instructions = format_instructions(steps)
 
-            if name and ingredients and instructions:
-                save_user_recipe(name, ingredients, instructions, source="user", api_id=None)
+            valid, msg = validate_name(name)
+            if not valid:
+                flash(msg, "error")
+                return render_template("recipe_form.html", recipe=None)
+
+            valid, msg = validate_ingredients(ingredients)
+            if not valid:
+                flash(msg, "error")
+                return render_template("recipe_form.html", recipe=None)
+
+            valid, msg = validate_instructions(instructions)
+            if not valid:
+                flash(msg, "error")
+                return render_template("recipe_form.html", recipe=None)
+
+            save_user_recipe(name, ingredients, instructions, source="user", api_id=None)
             return redirect(url_for('my_recipes'))
 
         return render_template("recipe_form.html", recipe=None)
+
+
 
 
     @app.route('/my_recipes/<int:recipe_id>/edit', methods=['GET', 'POST'])
