@@ -11,13 +11,13 @@ ingredient_cache = {}
 def normalize_ingredient(ingredient):
     ing = ingredient.lower().strip()
 
-    if ing.endswith("ies") and len(ing) > 4:   # e.g., "berries" -> "berry"
+    if ing.endswith("ies") and len(ing) > 4:   
         ing = ing[:-3] + "y"
-    elif ing.endswith("oes") and len(ing) > 4:  # e.g., "tomatoes" -> "tomato"
+    elif ing.endswith("oes") and len(ing) > 4: 
         ing = ing[:-2]
-    elif ing.endswith("es") and len(ing) > 3:   # e.g., "dishes" -> "dish"
+    elif ing.endswith("es") and len(ing) > 3:  
         ing = ing[:-2]
-    elif ing.endswith("s") and len(ing) > 3:    # fallback: "apples" -> "apple"
+    elif ing.endswith("s") and len(ing) > 3:  
         ing = ing[:-1]
 
     return ing
