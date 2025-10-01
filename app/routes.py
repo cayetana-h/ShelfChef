@@ -2,7 +2,7 @@ from flask import render_template, request, redirect, url_for, jsonify, flash
 from .storage import (
     get_user_recipes, save_user_recipe, get_user_recipe,
     update_user_recipe, delete_user_recipe
-)
+    )
 from .api_client import search_recipes, get_recipe_details, get_ingredient_suggestions
 from .utils import (
     normalize_ingredients, build_cache_key, matching_missing_for_recipe, sort_recipes, 
@@ -20,7 +20,6 @@ def init_routes(app):
     def results():
         """ 
         displays recipe search results based on user ingredients and sort preference
-
         """
         raw_input = request.args.get("ingredients", "")
         sort_by = request.args.get("sort_by", "weighted")
@@ -49,6 +48,9 @@ def init_routes(app):
 
     @app.route('/recipe/<int:recipe_id>')
     def recipe_detail(recipe_id):
+        """
+        fetches and displays recipe steps about a specific recipe
+        """
         recipe = get_recipe_details(recipe_id)
         if not recipe:
             return "Recipe not found", 404
@@ -72,7 +74,9 @@ def init_routes(app):
 
     @app.route('/my_recipes/new', methods=['GET', 'POST'])
     def new_recipe():
-        """handles both displaying the form and processing form submissions for new recipes"""
+        """
+        handles both displaying the form and processing form submissions for new recipes
+        """
         if request.method == 'POST':
             name = request.form.get("name", "").title().strip()
             raw_ingredients = request.form.get("ingredients", "")
@@ -101,10 +105,11 @@ def init_routes(app):
         return render_template("recipe_form.html", recipe=None)
 
 
-
-
     @app.route('/my_recipes/<int:recipe_id>/edit', methods=['GET', 'POST'])
     def edit_recipe(recipe_id):
+        """
+        displaying the edit form and updating a user's recipe (valdiation)
+        """
         recipe = get_user_recipe(recipe_id)
         if not recipe:
             return "Recipe not found", 404
@@ -114,42 +119,79 @@ def init_routes(app):
 
         if request.method == 'POST':
             name = request.form.get("name", "").title().strip()
-            ingredients = [i.strip() for i in request.form.get("ingredients", "").split(",") if i.strip()]
+            raw_ingredients = request.form.get("ingredients", "")
+            ingredients = normalize_ingredients(raw_ingredients)
             steps = request.form.getlist("instructions[]")
-            instructions = "\n".join(f"{i+1}. {step.strip()}" for i, step in enumerate(steps) if step.strip())
+            instructions = format_instructions(steps)
+
+            valid, msg = validate_name(name)
+            if not valid:
+                flash(msg, "error")
+                return render_template("recipe_form.html", recipe=recipe)
+
+            valid, msg = validate_ingredients(ingredients)
+            if not valid:
+                flash(msg, "error")
+                return render_template("recipe_form.html", recipe=recipe)
+
+            valid, msg = validate_instructions(instructions)
+            if not valid:
+                flash(msg, "error")
+                return render_template("recipe_form.html", recipe=recipe)
 
             updated = update_user_recipe(recipe_id, name, ingredients, instructions)
             if not updated:
-                return "Unable to update recipe.", 400
+                flash("Unable to update recipe.", "error")
+                return render_template("recipe_form.html", recipe=recipe)
+
             return redirect(url_for('my_recipes'))
 
-        recipe_steps = recipe["instructions"].split("\n") if recipe.get("instructions") else []
+        recipe_steps = recipe.get("instructions", "").split("\n")
         return render_template("recipe_form.html", recipe=recipe, recipe_steps=recipe_steps)
-
 
     @app.route('/my_recipes/<int:recipe_id>/delete', methods=['POST'])
     def delete_recipe(recipe_id):
         delete_user_recipe(recipe_id)
         return redirect(url_for('my_recipes'))
 
-    # ---------- API Save (saving an API result into our DB) ----------
+    # ---------- API Save (saving an API result into DB) ----------
     @app.route('/save_recipe', methods=['POST'])
     def save_recipe():
-        name = request.form.get("name")
-        ingredients = [i.strip() for i in request.form.get("ingredients", "").split(",") if i.strip()]
-        instructions = request.form.get("instructions")
+        """saving a recipe coming from the API to my recipes"""
+        name = request.form.get("name", "").title().strip()
+        raw_ingredients = request.form.get("ingredients", "")
+
+        ingredients = normalize_ingredients(raw_ingredients)
+        instructions = request.form.get("instructions", "").strip()
 
         api_id_raw = request.form.get("api_id")
         api_id = int(api_id_raw) if api_id_raw and api_id_raw.isdigit() else None
 
-        if name and ingredients and instructions:
-            save_user_recipe(name, ingredients, instructions, source="api", api_id=api_id)
+        valid, msg = validate_name(name)
+        if not valid:
+            flash(msg, "error")
+            return redirect(request.referrer or url_for('home'))
+
+        valid, msg = validate_ingredients(ingredients)
+        if not valid:
+            flash(msg, "error")
+            return redirect(request.referrer or url_for('home'))
+
+        valid, msg = validate_instructions(instructions)
+        if not valid:
+            flash(msg, "error")
+            return redirect(request.referrer or url_for('home'))
+
+        save_user_recipe(name, ingredients, instructions, source="api", api_id=api_id)
 
         return redirect(url_for('my_recipes'))
 
 
     @app.route("/ingredient_suggestions")
     def ingredient_suggestions():
+        """
+        provides ingredient suggestions for autocomplete as JSON
+        """
         query = request.args.get("query", "").strip()
         suggestions = get_ingredient_suggestions(query)
         return jsonify(suggestions)

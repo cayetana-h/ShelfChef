@@ -12,7 +12,7 @@ def _ensure_db():
     """
     Ensure the `my_recipes` table exists and has the expected columns.
     This will create the table if it doesn't exist and add missing columns (source, api_id).
-    """
+    """ 
     conn = _get_connection()
     c = conn.cursor()
     c.execute("""
