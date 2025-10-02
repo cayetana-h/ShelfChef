@@ -94,8 +94,9 @@ p = inflect.engine()
 def normalize_ingredient(ingredient: str) -> str:
     """ normalizing ingredient names for consistency"""
     ing = ingredient.strip().lower()
-    ing = ''.join(c for c in ing if c.isalpha() or c.isspace()) 
-    ing = p.singular_noun(ing) or ing 
+    if not ing:
+        return ""
+    ing = p.singular_noun(ing) or ing
     return ing
 
 
