@@ -1,5 +1,6 @@
 import requests
 import sqlite3
+from .utils import build_recipe_dict, normalize_ingredient
 
 API_KEY = "3f522310e0834471886574d3cef664c5"  
 API_URL = "https://api.spoonacular.com/recipes/findByIngredients"
@@ -8,30 +9,17 @@ INGREDIENT_AUTOCOMPLETE_URL = "https://api.spoonacular.com/food/ingredients/auto
 
 ingredient_cache = {}
 
-def normalize_ingredient(ingredient):
-    ing = ingredient.lower().strip()
 
-    if ing.endswith("ies") and len(ing) > 4:   
-        ing = ing[:-3] + "y"
-    elif ing.endswith("oes") and len(ing) > 4: 
-        ing = ing[:-2]
-    elif ing.endswith("es") and len(ing) > 3:  
-        ing = ing[:-2]
-    elif ing.endswith("s") and len(ing) > 3:  
-        ing = ing[:-1]
+from app.utils import build_recipe_dict
 
-    return ing
-
-
-def search_recipes(user_ingredients):
-
+def search_recipes(user_ingredients, limit=10):
+    """
+    searching recipes on spoonacular based on user ingredients
+    retrieveing twice the display limit to find best matches and not run out of api calls
+    """
     normalized_ingredients = [normalize_ingredient(i) for i in user_ingredients if i.strip()]
     ingredients_str = ",".join(normalized_ingredients)
-    params = {
-        "ingredients": ingredients_str,
-        "number": 10, 
-        "apiKey": API_KEY
-    }
+    params = {"ingredients": ingredients_str, "number": limit * 2, "apiKey": API_KEY}  
 
     response = requests.get(API_URL, params=params)
     if response.status_code != 200:
@@ -43,31 +31,15 @@ def search_recipes(user_ingredients):
 
     for recipe in recipes_data:
         recipe_id = recipe["id"]
-
         details_response = requests.get(RECIPE_DETAILS_URL.format(id=recipe_id), params={"apiKey": API_KEY})
-        if details_response.status_code == 200:
-            details = details_response.json()
-            recipes.append({
-                "id": recipe_id,
-                "name": recipe.get("title", "No name"),
-                "ingredients": [normalize_ingredient(i["name"]) for i in recipe.get("usedIngredients", []) + recipe.get("missedIngredients", [])],
-                "instructions": details.get("instructions", ""),
-                "image": details.get("image", ""),
-                "missing_ingredients": len(recipe.get("missedIngredients", [])),
-                "sourceUrl": details.get("sourceUrl", "")
-            })
-        else:
-            recipes.append({
-                "id": recipe_id,
-                "name": recipe.get("title", "No name"),
-                "ingredients": [normalize_ingredient(i["name"]) for i in recipe.get("usedIngredients", []) + recipe.get("missedIngredients", [])],
-                "instructions": "",
-                "image": "",
-                "missing_ingredients": len(recipe.get("missedIngredients", [])),
-                "sourceUrl": ""
-            })
+        details = details_response.json() if details_response.status_code == 200 else None
+        recipes.append(build_recipe_dict(recipe, details))
 
-    return recipes
+    recipes.sort(key=lambda r: r["missing_ingredients"])
+
+    return recipes[:limit]
+
+
 
 def get_recipe_details(recipe_id):
     """

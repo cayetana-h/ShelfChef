@@ -1,3 +1,5 @@
+
+
     # ---------- FOR ROUTES.PY  ----------
 
 def normalize_ingredients(raw_ingredients: str):
@@ -82,3 +84,38 @@ def validate_instructions(instructions: str):
 def format_instructions(steps: list):
     """ transforming a list of steps into a numbered string and removing empty steps"""
     return "\n".join(f"{i+1}. {step.strip()}" for i, step in enumerate(steps) if step.strip())
+
+
+    # ---------- API_CLIENT.PY----------
+
+import inflect
+p = inflect.engine()
+
+def normalize_ingredient(ingredient: str) -> str:
+    """ normalizing ingredient names for consistency"""
+    ing = ingredient.strip().lower()
+    ing = ''.join(c for c in ing if c.isalpha() or c.isspace()) 
+    ing = p.singular_noun(ing) or ing 
+    return ing
+
+
+def build_recipe_dict(recipe_data, details_data=None):
+    """
+    building a consistent recipe dictionary from API data
+    """
+    ingredients = [normalize_ingredient(i["name"]) 
+                   for i in recipe_data.get("usedIngredients", []) + recipe_data.get("missedIngredients", [])]
+
+    recipe_dict = {
+        "id": recipe_data.get("id"),
+        "name": recipe_data.get("title", "No name"),
+        "ingredients": ingredients,
+        "instructions": details_data.get("instructions", "") if details_data else "",
+        "image": details_data.get("image", "") if details_data else "",
+        "missing_ingredients": len(recipe_data.get("missedIngredients", [])),
+        "sourceUrl": details_data.get("sourceUrl", "") if details_data else ""
+    }
+
+    return recipe_dict
+
+

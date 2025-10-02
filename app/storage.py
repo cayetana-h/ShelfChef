@@ -9,10 +9,7 @@ def _get_connection():
     return conn
 
 def _ensure_db():
-    """
-    Ensure the `my_recipes` table exists and has the expected columns.
-    This will create the table if it doesn't exist and add missing columns (source, api_id).
-    """ 
+    """ensuring the database and tables exist, with necessary schema"""
     conn = _get_connection()
     c = conn.cursor()
     c.execute("""
@@ -38,6 +35,7 @@ def _ensure_db():
 _ensure_db()
 
 def _row_to_recipe(row: sqlite3.Row) -> Dict[str, Any]:
+    """convertng a DB row to a recipe dict"""
     ingredients_text = row["ingredients"] or ""
     ingredients = [i.strip() for i in ingredients_text.split(",")] if ingredients_text else []
     source = row["source"] if "source" in row.keys() else "user"
@@ -53,7 +51,7 @@ def _row_to_recipe(row: sqlite3.Row) -> Dict[str, Any]:
     }
 
 def get_user_recipes() -> List[Dict[str, Any]]:
-    """Retrieve all stored recipes (both user-created and saved-from-API)."""
+    """retrieving all stored recipes (both user-created and saved-from-API)."""
     conn = _get_connection()
     c = conn.cursor()
     c.execute("SELECT id, name, ingredients, instructions, source, api_id FROM my_recipes ORDER BY id DESC")
@@ -62,7 +60,7 @@ def get_user_recipes() -> List[Dict[str, Any]]:
     return [_row_to_recipe(r) for r in rows]
 
 def get_user_recipe(recipe_id: int) -> Optional[Dict[str, Any]]:
-    """Retrieve a single recipe by ID."""
+    """retrieves a single recipe by ID."""
     conn = _get_connection()
     c = conn.cursor()
     c.execute("SELECT id, name, ingredients, instructions, source, api_id FROM my_recipes WHERE id = ?", (recipe_id,))
@@ -74,10 +72,7 @@ def get_user_recipe(recipe_id: int) -> Optional[Dict[str, Any]]:
 
 def save_user_recipe(name: str, ingredients: List[str], instructions: str, source: str = "user", api_id: Optional[int] = None) -> int:
     """
-    Save a new recipe.
-    - source: 'user' (default) or 'api'
-    - api_id: optional integer ID from upstream API (if source == 'api')
-    Returns the inserted row id.
+    saves a new recipe to the db + returns new recipe ID
     """
     conn = _get_connection()
     c = conn.cursor()
@@ -92,7 +87,7 @@ def save_user_recipe(name: str, ingredients: List[str], instructions: str, sourc
 
 def update_user_recipe(recipe_id: int, name: str, ingredients: List[str], instructions: str) -> bool:
     """
-    Update a recipe only if it's user-created. Returns True if updated, False otherwise.
+    updates an existing user-created recipe
     """
     existing = get_user_recipe(recipe_id)
     if not existing:
@@ -111,7 +106,7 @@ def update_user_recipe(recipe_id: int, name: str, ingredients: List[str], instru
     return True
 
 def delete_user_recipe(recipe_id: int) -> bool:
-    """Delete a recipe by ID. Returns True if a row was deleted."""
+    """deletes a user-created recipe by ID"""
     conn = _get_connection()
     c = conn.cursor()
     c.execute("DELETE FROM my_recipes WHERE id = ?", (recipe_id,))
