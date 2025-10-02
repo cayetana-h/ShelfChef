@@ -2,7 +2,7 @@ import requests
 import sqlite3
 from .utils import build_recipe_dict, normalize_ingredient
 
-API_KEY = "3f522310e0834471886574d3cef664c5"  
+API_KEY = "7a4034bf906f4a51acd1eed1613787a4"  
 API_URL = "https://api.spoonacular.com/recipes/findByIngredients"
 RECIPE_DETAILS_URL = "https://api.spoonacular.com/recipes/{id}/information"
 INGREDIENT_AUTOCOMPLETE_URL = "https://api.spoonacular.com/food/ingredients/autocomplete"
@@ -36,7 +36,6 @@ def search_recipes(user_ingredients, limit=10):
         recipes.append(build_recipe_dict(recipe, details))
 
     recipes.sort(key=lambda r: r["missing_ingredients"])
-
     return recipes[:limit]
 
 

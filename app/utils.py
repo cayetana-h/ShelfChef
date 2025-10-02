@@ -104,15 +104,19 @@ def build_recipe_dict(recipe_data, details_data=None):
     """
     building a consistent recipe dictionary from API data
     """
-    ingredients = [normalize_ingredient(i["name"]) 
-                   for i in recipe_data.get("usedIngredients", []) + recipe_data.get("missedIngredients", [])]
+    ingredients = [
+        normalize_ingredient(i["name"]) 
+        for i in recipe_data.get("usedIngredients", []) + recipe_data.get("missedIngredients", [])
+    ]
+
+    image = details_data.get("image") if details_data and details_data.get("image") else "/static/images/placeholder.png"
 
     recipe_dict = {
         "id": recipe_data.get("id"),
         "name": recipe_data.get("title", "No name"),
         "ingredients": ingredients,
         "instructions": details_data.get("instructions", "") if details_data else "",
-        "image": details_data.get("image", "") if details_data else "",
+        "image": image,
         "missing_ingredients": len(recipe_data.get("missedIngredients", [])),
         "sourceUrl": details_data.get("sourceUrl", "") if details_data else ""
     }

@@ -147,7 +147,12 @@
 
                 {% if recipe.image %}
                     <img src="{{ recipe.image }}" alt="{{ recipe.name }}">
+                {% else %}
+                    <div style="width:200px; height:150px; display:flex; align-items:center; justify-content:center; background-color:#f0f0f0; border-radius:8px; margin-bottom:10px; color:#888; font-size:14px;">
+                        No image available
+                    </div>
                 {% endif %}
+
 
                 <p>Matching Ingredients: {{ recipe.matches | join(', ') }}</p>
                 <p>Missing Ingredients: {{ recipe.missing_count }}</p>
