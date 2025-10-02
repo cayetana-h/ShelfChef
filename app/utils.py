@@ -109,7 +109,12 @@ def build_recipe_dict(recipe_data, details_data=None):
         for i in recipe_data.get("usedIngredients", []) + recipe_data.get("missedIngredients", [])
     ]
 
-    image = details_data.get("image") if details_data and details_data.get("image") else "/static/images/placeholder.png"
+    if details_data and details_data.get("image"):
+        image = details_data.get("image")
+    elif recipe_data.get("image"):
+        image = recipe_data.get("image")
+    else:
+        image = None
 
     recipe_dict = {
         "id": recipe_data.get("id"),

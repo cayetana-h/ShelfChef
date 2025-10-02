@@ -22,6 +22,15 @@ def _ensure_db():
             api_id INTEGER
         )
     """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS cached_responses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            query TEXT UNIQUE NOT NULL,
+            response TEXT NOT NULL
+        )
+    """)
+
     conn.commit()
 
     cols = [r["name"] for r in c.execute("PRAGMA table_info(my_recipes)").fetchall()]
@@ -29,6 +38,7 @@ def _ensure_db():
         c.execute("ALTER TABLE my_recipes ADD COLUMN source TEXT DEFAULT 'user'")
     if "api_id" not in cols:
         c.execute("ALTER TABLE my_recipes ADD COLUMN api_id INTEGER")
+
     conn.commit()
     conn.close()
 
@@ -114,3 +124,26 @@ def delete_user_recipe(recipe_id: int) -> bool:
     changed = c.rowcount > 0
     conn.close()
     return changed
+
+# ------------------------
+# Cache helpers
+# ------------------------
+def get_cached_response(query: str) -> Optional[str]:
+    """returns cached JSON string for a query if it exists"""
+    conn = _get_connection()
+    c = conn.cursor()
+    c.execute("SELECT response FROM cached_responses WHERE query = ?", (query,))
+    row = c.fetchone()
+    conn.close()
+    return row["response"] if row else None
+
+def save_cached_response(query: str, response: str) -> None:
+    """saves or updates cache for a query"""
+    conn = _get_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO cached_responses (query, response) VALUES (?, ?)
+        ON CONFLICT(query) DO UPDATE SET response=excluded.response
+    """, (query, response))
+    conn.commit()
+    conn.close()
