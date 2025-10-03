@@ -1,38 +1,36 @@
 import requests
 import sqlite3
+from .utils import build_recipe_dict, normalize_ingredient, clean_instructions
 
-API_KEY = "3f522310e0834471886574d3cef664c5"  
+API_KEY = "5b40c2b34c7948829d7216978e11b81e"  
 API_URL = "https://api.spoonacular.com/recipes/findByIngredients"
 RECIPE_DETAILS_URL = "https://api.spoonacular.com/recipes/{id}/information"
 INGREDIENT_AUTOCOMPLETE_URL = "https://api.spoonacular.com/food/ingredients/autocomplete"
 
 ingredient_cache = {}
 
-def normalize_ingredient(ingredient):
-    ing = ingredient.lower().strip()
 
-    if ing.endswith("ies") and len(ing) > 4:   # e.g., "berries" -> "berry"
-        ing = ing[:-3] + "y"
-    elif ing.endswith("oes") and len(ing) > 4:  # e.g., "tomatoes" -> "tomato"
-        ing = ing[:-2]
-    elif ing.endswith("es") and len(ing) > 3:   # e.g., "dishes" -> "dish"
-        ing = ing[:-2]
-    elif ing.endswith("s") and len(ing) > 3:    # fallback: "apples" -> "apple"
-        ing = ing[:-1]
+from app.utils import build_recipe_dict
 
-    return ing
+import json
+from .storage import get_cached_response, save_cached_response
 
-
-def search_recipes(user_ingredients):
-
+def search_recipes(user_ingredients, limit=10):
+    """
+    searching recipes based on user-provided ingredients
+    first checking local cache, then falling back to API if needed
+    """
     normalized_ingredients = [normalize_ingredient(i) for i in user_ingredients if i.strip()]
     ingredients_str = ",".join(normalized_ingredients)
-    params = {
-        "ingredients": ingredients_str,
-        "number": 10, 
-        "apiKey": API_KEY
-    }
 
+    cached = get_cached_response(ingredients_str)
+    if cached:
+        try:
+            return json.loads(cached)
+        except Exception as e:
+            print(f"Cache decode error: {e}, falling back to API...")
+
+    params = {"ingredients": ingredients_str, "number": limit * 2, "apiKey": API_KEY}  
     response = requests.get(API_URL, params=params)
     if response.status_code != 200:
         print(f"API error: {response.status_code}")
@@ -43,35 +41,21 @@ def search_recipes(user_ingredients):
 
     for recipe in recipes_data:
         recipe_id = recipe["id"]
-
         details_response = requests.get(RECIPE_DETAILS_URL.format(id=recipe_id), params={"apiKey": API_KEY})
-        if details_response.status_code == 200:
-            details = details_response.json()
-            recipes.append({
-                "id": recipe_id,
-                "name": recipe.get("title", "No name"),
-                "ingredients": [normalize_ingredient(i["name"]) for i in recipe.get("usedIngredients", []) + recipe.get("missedIngredients", [])],
-                "instructions": details.get("instructions", ""),
-                "image": details.get("image", ""),
-                "missing_ingredients": len(recipe.get("missedIngredients", [])),
-                "sourceUrl": details.get("sourceUrl", "")
-            })
-        else:
-            recipes.append({
-                "id": recipe_id,
-                "name": recipe.get("title", "No name"),
-                "ingredients": [normalize_ingredient(i["name"]) for i in recipe.get("usedIngredients", []) + recipe.get("missedIngredients", [])],
-                "instructions": "",
-                "image": "",
-                "missing_ingredients": len(recipe.get("missedIngredients", [])),
-                "sourceUrl": ""
-            })
+        details = details_response.json() if details_response.status_code == 200 else None
+        recipes.append(build_recipe_dict(recipe, details))
 
-    return recipes
+    recipes.sort(key=lambda r: r["missing_ingredients"])
+    final_recipes = recipes[:limit]
+
+    save_cached_response(ingredients_str, json.dumps(final_recipes))
+
+    return final_recipes
+
 
 def get_recipe_details(recipe_id):
     """
-    Fetching full details for a single recipe by ID.
+    fetching full details for a single recipe by ID 
     """
     response = requests.get(RECIPE_DETAILS_URL.format(id=recipe_id), params={"apiKey": API_KEY})
     if response.status_code == 200:
@@ -79,9 +63,9 @@ def get_recipe_details(recipe_id):
         return {
             "id": recipe_id,
             "name": details.get("title", "No name"),
-            "ingredients": [normalize_ingredient(ingredient["name"]) for ingredient in details.get("extendedIngredients", [])],
-            "instructions": details.get("instructions", ""),
-            "image": details.get("image", ""),
+            "ingredients": [normalize_ingredient(ing["name"]) for ing in details.get("extendedIngredients", [])],
+            "instructions": clean_instructions(details.get("instructions", "")),  # <- now a clean list
+            "image": details.get("image") if details and details.get("image") else None,
             "sourceUrl": details.get("sourceUrl", "")
         }
     else:
@@ -89,7 +73,7 @@ def get_recipe_details(recipe_id):
         return None
 
 def get_common_ingredients_from_db():
-    """Fetch common ingredients stored in the SQLite database."""
+    """fetiching common ingredients stored in the db"""
     conn = sqlite3.connect("recipes.db")
     c = conn.cursor()
     c.execute("SELECT name FROM ingredients")  
@@ -99,8 +83,8 @@ def get_common_ingredients_from_db():
 
 def get_ingredient_suggestions(query):
     """
-    Returns ingredient suggestions from DB (if query empty),
-    in-memory cache, or Spoonacular autocomplete if nothing else matches.
+    fetching ingredient suggestions based on user input
+    using local db cache first, then falling back to API if needed
     """
     query = normalize_ingredient(query)
 
