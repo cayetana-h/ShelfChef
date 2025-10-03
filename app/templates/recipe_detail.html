@@ -81,8 +81,15 @@
 <body>
     <h1>{{ recipe.name }}</h1>
 
-    {% if recipe.image %}
-        <img src="{{ recipe.image }}" alt="{{ recipe.name }}">
+    {% if recipe.image and recipe.image.strip() %}
+        <img src="{{ recipe.image }}" alt="{{ recipe.name }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div style="width:100%; max-width:300px; height:225px; display:none; align-items:center; justify-content:center; background-color:#f0f0f0; border-radius:12px; margin:0 auto 20px auto; color:#888; font-size:16px; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+            No image available
+        </div>
+    {% else %}
+        <div style="width:100%; max-width:300px; height:225px; display:flex; align-items:center; justify-content:center; background-color:#f0f0f0; border-radius:12px; margin:0 auto 20px auto; color:#888; font-size:16px; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+            No image available
+        </div>
     {% endif %}
 
     <h2>Ingredients:</h2>

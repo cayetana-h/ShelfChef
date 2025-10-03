@@ -104,21 +104,25 @@ def normalize_ingredient(ingredient: str) -> str:
 
 
 def build_recipe_dict(recipe_data, details_data=None):
-    """
-    building a consistent recipe dictionary from API data
-    """
+    """ building a consistent recipe dictionary from API data """
     ingredients = [
-        normalize_ingredient(i["name"]) 
+        normalize_ingredient(i["name"])
         for i in recipe_data.get("usedIngredients", []) + recipe_data.get("missedIngredients", [])
     ]
-
+    
+    image = None
     if details_data and details_data.get("image"):
         image = details_data.get("image")
+        if isinstance(image, str):
+            image = image.strip()
     elif recipe_data.get("image"):
         image = recipe_data.get("image")
-    else:
+        if isinstance(image, str):
+            image = image.strip()
+    
+    if not image or image == "":
         image = None
-
+    
     recipe_dict = {
         "id": recipe_data.get("id"),
         "name": recipe_data.get("title", "No name"),
@@ -128,8 +132,9 @@ def build_recipe_dict(recipe_data, details_data=None):
         "missing_ingredients": len(recipe_data.get("missedIngredients", [])),
         "sourceUrl": details_data.get("sourceUrl", "") if details_data else ""
     }
-
+    
     return recipe_dict
+
 
 def clean_instructions(raw_instructions: str):
     """ cleaning and splitting raw HTML instructions"""
@@ -141,5 +146,3 @@ def clean_instructions(raw_instructions: str):
     steps = [re.sub(r'[^\w\s,.()/-]', '', step).strip() for step in steps if step.strip()]
 
     return steps
-
-
