@@ -60,11 +60,16 @@ def get_recipe_details(recipe_id):
     response = requests.get(RECIPE_DETAILS_URL.format(id=recipe_id), params={"apiKey": API_KEY})
     if response.status_code == 200:
         details = response.json()
+        image = details.get("image", "")
+        if image:
+            image = image.strip()
+        if not image:
+            image = None
         return {
             "id": recipe_id,
             "name": details.get("title", "No name"),
             "ingredients": [normalize_ingredient(ing["name"]) for ing in details.get("extendedIngredients", [])],
-            "instructions": clean_instructions(details.get("instructions", "")),  # <- now a clean list
+            "instructions": clean_instructions(details.get("instructions", "")),  
             "image": details.get("image") if details and details.get("image") else None,
             "sourceUrl": details.get("sourceUrl", "")
         }
