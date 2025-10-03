@@ -98,7 +98,7 @@
     <form action="{{ url_for('save_recipe') }}" method="post">
         <input type="hidden" name="name" value="{{ recipe.name }}">
         <input type="hidden" name="ingredients" value="{{ recipe.ingredients | join(',') }}">
-        <input type="hidden" name="instructions" value="{{ recipe.instructions }}">
+        <input type="hidden" name="instructions" value="{{ recipe.instructions | join(' || ') }}">
         <button type="submit">Save Recipe</button>
     </form>
 

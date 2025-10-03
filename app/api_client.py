@@ -1,6 +1,6 @@
 import requests
 import sqlite3
-from .utils import build_recipe_dict, normalize_ingredient
+from .utils import build_recipe_dict, normalize_ingredient, clean_instructions
 
 API_KEY = "5b40c2b34c7948829d7216978e11b81e"  
 API_URL = "https://api.spoonacular.com/recipes/findByIngredients"
@@ -20,7 +20,6 @@ def search_recipes(user_ingredients, limit=10):
     searching recipes based on user-provided ingredients
     first checking local cache, then falling back to API if needed
     """
-    # Normalize input
     normalized_ingredients = [normalize_ingredient(i) for i in user_ingredients if i.strip()]
     ingredients_str = ",".join(normalized_ingredients)
 
@@ -56,7 +55,7 @@ def search_recipes(user_ingredients, limit=10):
 
 def get_recipe_details(recipe_id):
     """
-    fetching full details for a single recipe by ID
+    fetching full details for a single recipe by ID 
     """
     response = requests.get(RECIPE_DETAILS_URL.format(id=recipe_id), params={"apiKey": API_KEY})
     if response.status_code == 200:
@@ -64,8 +63,8 @@ def get_recipe_details(recipe_id):
         return {
             "id": recipe_id,
             "name": details.get("title", "No name"),
-            "ingredients": [normalize_ingredient(ingredient["name"]) for ingredient in details.get("extendedIngredients", [])],
-            "instructions": details.get("instructions", ""),
+            "ingredients": [normalize_ingredient(ing["name"]) for ing in details.get("extendedIngredients", [])],
+            "instructions": clean_instructions(details.get("instructions", "")),  # <- now a clean list
             "image": details.get("image") if details and details.get("image") else None,
             "sourceUrl": details.get("sourceUrl", "")
         }

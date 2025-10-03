@@ -89,6 +89,9 @@ def format_instructions(steps: list):
     # ---------- API_CLIENT.PY----------
 
 import inflect
+import re
+from bs4 import BeautifulSoup
+
 p = inflect.engine()
 
 def normalize_ingredient(ingredient: str) -> str:
@@ -127,5 +130,16 @@ def build_recipe_dict(recipe_data, details_data=None):
     }
 
     return recipe_dict
+
+def clean_instructions(raw_instructions: str):
+    """ cleaning and splitting raw HTML instructions"""
+    if not raw_instructions:
+        return []
+
+    text = BeautifulSoup(raw_instructions, "html.parser").get_text()
+    steps = re.split(r'(?:\d+\.\s*|\n+)', text)
+    steps = [re.sub(r'[^\w\s,.()/-]', '', step).strip() for step in steps if step.strip()]
+
+    return steps
 
 
