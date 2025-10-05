@@ -6,29 +6,30 @@ Enter your available ingredients, and ShelfChef will suggest recipes by integrat
 It also supports saving your own recipes locally, caching API results for faster performance, and managing your personal recipe collection.
 
 ## 🗂 Project Structure
+
 .
 ├── README.md
 ├── app
-│   ├── __init__.py
-│   ├── api_client.py
-│   ├── routes.py
-│   ├── storage.py
-│   ├── templates
-│   │   ├── index.html
-│   │   ├── my_recipes.html
-│   │   ├── recipe_detail.html
-│   │   ├── recipe_form.html
-│   │   └── results.html
-│   └── utils.py
+│ ├── init.py
+│ ├── api_client.py
+│ ├── routes.py
+│ ├── storage.py
+│ ├── templates
+│ │ ├── index.html
+│ │ ├── my_recipes.html
+│ │ ├── recipe_detail.html
+│ │ ├── recipe_form.html
+│ │ └── results.html
+│ └── utils.py
 ├── create_db.py
 ├── inspect_db.py
 ├── main.py
 ├── requirements.txt
 └── tests
-    ├── test_api_client.py
-    ├── test_cache.py
-    ├── test_routes.py
-    └── test_storage.py
+├── test_api_client.py
+├── test_cache.py
+├── test_routes.py
+└── test_storage.py
 
 
 ---
@@ -47,20 +48,21 @@ It also supports saving your own recipes locally, caching API results for faster
 ---
 
 ## Create and activate your environment 
+### 1. Create and activate your environment 
 python -m venv venv
 source venv/bin/activate     # macOS/Linux
 venv\Scripts\activate        # Windows
 
-## Install Dependencies
+## # 2. Install Dependencies
 pip install -r requirements.txt
 
-## Initialize the database
+### 3. Initialize the database
 python create_db.py
 
-## Run App
+### 4. Run App
 python main.py
 
-## Running Tests
+### 5.Running Tests
 PYTHONPATH=$(pwd) pytest tests     # macOS/Linux
 set PYTHONPATH=%cd% && pytest tests # Windows (PowerShell)
 

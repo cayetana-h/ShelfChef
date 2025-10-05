@@ -1,0 +1,2243 @@
+
+
+===== FILE: ./combine_to_text.py =====
+
+import os
+
+# The root folder of your project
+root_dir = "."
+
+# File extensions you want to include
+extensions = (".py", ".html", ".css", ".js")
+
+# Output file
+output_file = "shelfchef_codebase.txt"
+
+with open(output_file, "w", encoding="utf-8") as out:
+    for folder, _, files in os.walk(root_dir):
+        for file in files:
+            if file.endswith(extensions):
+                path = os.path.join(folder, file)
+                out.write(f"\n\n===== FILE: {path} =====\n\n")
+                with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                    out.write(f.read())
+
+print(f"✅ All code merged into {output_file}")
+
+
+===== FILE: ./inspect_db.py =====
+
+import sqlite3
+
+conn = sqlite3.connect("recipes.db")
+c = conn.cursor()
+
+c.execute("SELECT name FROM sqlite_master WHERE type='table';")
+print("Tables:", c.fetchall())
+
+c.execute("SELECT * FROM ingredients LIMIT 10;")
+print("Ingredients:", c.fetchall())
+
+conn.close()
+
+
+===== FILE: ./main.py =====
+
+from app import create_app
+
+app = create_app()
+
+if __name__ == "__main__":
+    app.run(debug=True)  
+
+
+===== FILE: ./create_db.py =====
+
+import sqlite3
+
+conn = sqlite3.connect('recipes.db')
+c = conn.cursor()
+
+# Table for user-created or saved recipes
+c.execute('''
+CREATE TABLE IF NOT EXISTS my_recipes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    ingredients TEXT NOT NULL,
+    instructions TEXT NOT NULL
+)
+''')
+
+c.execute('''
+CREATE TABLE IF NOT EXISTS cached_responses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    query TEXT UNIQUE NOT NULL,
+    response TEXT NOT NULL
+)
+''')
+
+c.execute('''
+CREATE TABLE IF NOT EXISTS ingredients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL
+)
+''')
+
+common_ingredients = [
+    "onion", "garlic", "tomato", "chicken", "beef", "egg",
+    "milk", "cheese", "butter", "flour", "rice", "potato",
+    "carrot", "bell pepper", "spinach", "salt", "pepper", "sugar", "pasta",
+    "olive oil", "vinegar", "basil", "oregano", "cumin", "paprika"
+]
+
+c.executemany('''
+INSERT OR IGNORE INTO ingredients (name) VALUES (?)
+''', [(ingredient,) for ingredient in common_ingredients])
+
+conn.commit()
+conn.close()
+print("Database ready with user recipes, cache, and ingredients.")
+
+
+===== FILE: ./app/__init__.py =====
+
+from flask import Flask
+
+def create_app():
+    app = Flask(__name__)  
+
+    app.secret_key = "super-secret-key" 
+
+    from .routes import init_routes
+    init_routes(app)
+
+    return app
+
+
+===== FILE: ./app/utils.py =====
+
+
+
+    # ---------- FOR ROUTES.PY  ----------
+
+def normalize_ingredients(raw_ingredients: str):
+    """"normalizing user input ingredients"""
+    ingredients = [i.strip().lower() for i in raw_ingredients.split(",") if i.strip()]
+    return sorted(ingredients)
+
+
+def build_cache_key(ingredients_list):
+    """ creating a hashable cache key from user ingredients to store/retrieve search results"""
+    return tuple(ingredients_list)
+
+
+def matching_missing_for_recipe(user_ingredients, recipes):
+    """ adding matches and missing_count to each recipe dict"""
+    enriched = []
+    for r in recipes:
+        matches = set(user_ingredients) & set([i.lower() for i in r.get("ingredients", [])])
+        missing_count = len(r.get("ingredients", [])) - len(matches)
+        r_copy = r.copy()
+        r_copy["matches"] = list(matches)
+        r_copy["missing_count"] = missing_count
+        enriched.append(r_copy)
+    return enriched
+
+def sort_recipes(recipes, sort_by="weighted"):
+    """ sorting recipes based on user preference"""
+    if sort_by == "matches":
+        recipes.sort(key=lambda x: len(x["matches"]), reverse=True)
+    elif sort_by == "missing":
+        recipes.sort(key=lambda x: x["missing_count"])
+    else:
+        recipes.sort(key=lambda x: 2*len(x["matches"]) - x["missing_count"], reverse=True) # default 
+    return recipes
+
+def validate_recipe_form(name: str, raw_ingredients: str, steps: list):
+    """
+    validation for recipe form inputs
+    """
+    ingredients = normalize_ingredients(raw_ingredients)
+    instructions = format_instructions(steps)
+
+    valid, msg = validate_name(name)
+    if not valid:
+        return False, msg, ingredients, instructions
+
+    valid, msg = validate_ingredients(ingredients)
+    if not valid:
+        return False, msg, ingredients, instructions
+
+    valid, msg = validate_instructions(instructions)
+    if not valid:
+        return False, msg, ingredients, instructions
+
+    return True, "", ingredients, instructions
+
+
+
+    # ---------- MAINLY FOR MY RECIPES CRUD IN REOUTES.PY----------
+
+def validate_name(name: str, max_length=100):
+    """checking if the recipe name is  not too long or null"""
+    if not name:
+        return False, "Recipe name cannot be empty."
+    if len(name) > max_length:
+        return False, f"Recipe name cannot exceed {max_length} characters."
+    return True, ""
+
+def validate_ingredients(ingredients: list):
+    """checking there is at least one ingredient """
+    ingredients = list(dict.fromkeys(ingredients)) 
+    if not ingredients:
+        return False, "Please provide at least one ingredient.", []
+    return True, ""
+
+def validate_instructions(instructions: str):
+    """checking instructions are not null"""
+    if not instructions.strip():
+        return False, "Please provide instructions."
+    return True, ""
+
+def format_instructions(steps: list):
+    """ transforming a list of steps into a numbered string and removing empty steps"""
+    return "\n".join(f"{i+1}. {step.strip()}" for i, step in enumerate(steps) if step.strip())
+
+
+    # ---------- API_CLIENT.PY----------
+
+import inflect
+import re
+from bs4 import BeautifulSoup
+
+p = inflect.engine()
+
+def normalize_ingredient(ingredient: str) -> str:
+    """ normalizing ingredient names for consistency"""
+    ing = ingredient.strip().lower()
+    if not ing:
+        return ""
+    ing = p.singular_noun(ing) or ing
+    return ing
+
+
+def build_recipe_dict(recipe_data, details_data=None):
+    """ building a consistent recipe dictionary from API data """
+    ingredients = [
+        normalize_ingredient(i["name"])
+        for i in recipe_data.get("usedIngredients", []) + recipe_data.get("missedIngredients", [])
+    ]
+    
+    image = None
+    if details_data and details_data.get("image"):
+        image = details_data.get("image")
+        if isinstance(image, str):
+            image = image.strip()
+    elif recipe_data.get("image"):
+        image = recipe_data.get("image")
+        if isinstance(image, str):
+            image = image.strip()
+    
+    if not image or image == "":
+        image = None
+    
+    recipe_dict = {
+        "id": recipe_data.get("id"),
+        "name": recipe_data.get("title", "No name"),
+        "ingredients": ingredients,
+        "instructions": details_data.get("instructions", "") if details_data else "",
+        "image": image,
+        "missing_ingredients": len(recipe_data.get("missedIngredients", [])),
+        "sourceUrl": details_data.get("sourceUrl", "") if details_data else ""
+    }
+    
+    return recipe_dict
+
+
+def clean_instructions(raw_instructions: str):
+    """ cleaning and splitting raw HTML instructions"""
+    if not raw_instructions:
+        return []
+
+    text = BeautifulSoup(raw_instructions, "html.parser").get_text()
+    steps = re.split(r'(?:\d+\.\s*|\n+)', text)
+    steps = [re.sub(r'[^\w\s,.()/-]', '', step).strip() for step in steps if step.strip()]
+
+    return steps
+
+===== FILE: ./app/storage.py =====
+
+import sqlite3
+from typing import List, Optional, Dict, Any
+
+DB_PATH = "recipes.db"
+
+def _get_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def _ensure_db():
+    """ensuring the database and tables exist, with necessary schema"""
+    conn = _get_connection()
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS my_recipes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            ingredients TEXT,
+            instructions TEXT,
+            source TEXT DEFAULT 'user',
+            api_id INTEGER
+        )
+    """)
+
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS cached_responses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            query TEXT UNIQUE NOT NULL,
+            response TEXT NOT NULL
+        )
+    """)
+
+    conn.commit()
+
+    cols = [r["name"] for r in c.execute("PRAGMA table_info(my_recipes)").fetchall()]
+    if "source" not in cols:
+        c.execute("ALTER TABLE my_recipes ADD COLUMN source TEXT DEFAULT 'user'")
+    if "api_id" not in cols:
+        c.execute("ALTER TABLE my_recipes ADD COLUMN api_id INTEGER")
+
+    conn.commit()
+    conn.close()
+
+_ensure_db()
+
+def _row_to_recipe(row: sqlite3.Row) -> Dict[str, Any]:
+    """convertng a DB row to a recipe dict"""
+    ingredients_text = row["ingredients"] or ""
+    ingredients = [i.strip() for i in ingredients_text.split(",")] if ingredients_text else []
+    source = row["source"] if "source" in row.keys() else "user"
+    api_id = row["api_id"] if "api_id" in row.keys() else None
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "ingredients": ingredients,
+        "instructions": row["instructions"] or "",
+        "source": source,
+        "api_id": api_id,
+        "editable": True if source == "user" else False
+    }
+
+def get_user_recipes() -> List[Dict[str, Any]]:
+    """retrieving all stored recipes (both user-created and saved-from-API)."""
+    conn = _get_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, name, ingredients, instructions, source, api_id FROM my_recipes ORDER BY id DESC")
+    rows = c.fetchall()
+    conn.close()
+    return [_row_to_recipe(r) for r in rows]
+
+def get_user_recipe(recipe_id: int) -> Optional[Dict[str, Any]]:
+    """retrieves a single recipe by ID."""
+    conn = _get_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, name, ingredients, instructions, source, api_id FROM my_recipes WHERE id = ?", (recipe_id,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return _row_to_recipe(row)
+
+def save_user_recipe(name: str, ingredients: List[str], instructions: str, source: str = "user", api_id: Optional[int] = None) -> int:
+    """
+    saves a new recipe to the db + returns new recipe ID
+    """
+    conn = _get_connection()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO my_recipes (name, ingredients, instructions, source, api_id) VALUES (?, ?, ?, ?, ?)",
+        (name, ",".join([i.strip() for i in ingredients if i is not None]), instructions, source, api_id)
+    )
+    conn.commit()
+    rowid = c.lastrowid
+    conn.close()
+    return rowid
+
+def update_user_recipe(recipe_id: int, name: str, ingredients: List[str], instructions: str) -> bool:
+    """
+    updates an existing user-created recipe
+    """
+    existing = get_user_recipe(recipe_id)
+    if not existing:
+        return False
+    if existing.get("source") != "user":
+        return False
+
+    conn = _get_connection()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE my_recipes SET name = ?, ingredients = ?, instructions = ? WHERE id = ?",
+        (name, ",".join([i.strip() for i in ingredients if i is not None]), instructions, recipe_id)
+    )
+    conn.commit()
+    conn.close()
+    return True
+
+def delete_user_recipe(recipe_id: int) -> bool:
+    """deletes a user-created recipe by ID"""
+    conn = _get_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM my_recipes WHERE id = ?", (recipe_id,))
+    conn.commit()
+    changed = c.rowcount > 0
+    conn.close()
+    return changed
+
+# ------------------------
+# Cache helpers
+# ------------------------
+def get_cached_response(query: str) -> Optional[str]:
+    """returns cached JSON string for a query if it exists"""
+    conn = _get_connection()
+    c = conn.cursor()
+    c.execute("SELECT response FROM cached_responses WHERE query = ?", (query,))
+    row = c.fetchone()
+    conn.close()
+    return row["response"] if row else None
+
+def save_cached_response(query: str, response: str) -> None:
+    """saves or updates cache for a query"""
+    conn = _get_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO cached_responses (query, response) VALUES (?, ?)
+        ON CONFLICT(query) DO UPDATE SET response=excluded.response
+    """, (query, response))
+    conn.commit()
+    conn.close()
+
+===== FILE: ./app/api_client.py =====
+
+import requests
+import sqlite3
+from .utils import build_recipe_dict, normalize_ingredient, clean_instructions
+
+API_KEY = "5b40c2b34c7948829d7216978e11b81e"  
+API_URL = "https://api.spoonacular.com/recipes/findByIngredients"
+RECIPE_DETAILS_URL = "https://api.spoonacular.com/recipes/{id}/information"
+INGREDIENT_AUTOCOMPLETE_URL = "https://api.spoonacular.com/food/ingredients/autocomplete"
+
+ingredient_cache = {}
+
+
+from app.utils import build_recipe_dict
+
+import json
+from .storage import get_cached_response, save_cached_response
+
+def search_recipes(user_ingredients, limit=10):
+    """
+    searching recipes based on user-provided ingredients
+    first checking local cache, then falling back to API if needed
+    """
+    normalized_ingredients = [normalize_ingredient(i) for i in user_ingredients if i.strip()]
+    ingredients_str = ",".join(normalized_ingredients)
+
+    cached = get_cached_response(ingredients_str)
+    if cached:
+        try:
+            return json.loads(cached)
+        except Exception as e:
+            print(f"Cache decode error: {e}, falling back to API...")
+
+    params = {"ingredients": ingredients_str, "number": limit * 2, "apiKey": API_KEY}  
+    response = requests.get(API_URL, params=params)
+    if response.status_code != 200:
+        print(f"API error: {response.status_code}")
+        return []
+
+    recipes_data = response.json()
+    recipes = []
+
+    for recipe in recipes_data:
+        recipe_id = recipe["id"]
+        details_response = requests.get(RECIPE_DETAILS_URL.format(id=recipe_id), params={"apiKey": API_KEY})
+        details = details_response.json() if details_response.status_code == 200 else None
+        recipes.append(build_recipe_dict(recipe, details))
+
+    recipes.sort(key=lambda r: r["missing_ingredients"])
+    final_recipes = recipes[:limit]
+
+    save_cached_response(ingredients_str, json.dumps(final_recipes))
+
+    return final_recipes
+
+
+def get_recipe_details(recipe_id):
+    """
+    fetching full details for a single recipe by ID 
+    """
+    response = requests.get(RECIPE_DETAILS_URL.format(id=recipe_id), params={"apiKey": API_KEY})
+    if response.status_code == 200:
+        details = response.json()
+        image = details.get("image", "")
+        if image:
+            image = image.strip()
+        if not image:
+            image = None
+        return {
+            "id": recipe_id,
+            "name": details.get("title", "No name"),
+            "ingredients": [normalize_ingredient(ing["name"]) for ing in details.get("extendedIngredients", [])],
+            "instructions": clean_instructions(details.get("instructions", "")),  
+            "image": details.get("image") if details and details.get("image") else None,
+            "sourceUrl": details.get("sourceUrl", "")
+        }
+    else:
+        print(f"Failed to fetch recipe {recipe_id}, status: {response.status_code}")
+        return None
+
+def get_common_ingredients_from_db():
+    """fetiching common ingredients stored in the db"""
+    conn = sqlite3.connect("recipes.db")
+    c = conn.cursor()
+    c.execute("SELECT name FROM ingredients")  
+    rows = c.fetchall()
+    conn.close()
+    return [normalize_ingredient(row[0]) for row in rows]
+
+def get_ingredient_suggestions(query):
+    """
+    fetching ingredient suggestions based on user input
+    using local db cache first, then falling back to API if needed
+    """
+    query = normalize_ingredient(query)
+
+    if query == "":
+        return get_common_ingredients_from_db()
+
+    if query in ingredient_cache:
+        return ingredient_cache[query]
+
+    conn = sqlite3.connect("recipes.db")
+    c = conn.cursor()
+    c.execute("SELECT name FROM ingredients WHERE name LIKE ?", (f"{query}%",))
+    rows = c.fetchall()
+    conn.close()
+
+    suggestions = [normalize_ingredient(row[0]) for row in rows]
+
+    if not suggestions:
+        try:
+            response = requests.get(
+                INGREDIENT_AUTOCOMPLETE_URL,
+                params={"query": query, "number": 10, "apiKey": API_KEY}
+            )
+            if response.status_code == 200:
+                suggestions = [normalize_ingredient(item["name"]) for item in response.json()]
+                ingredient_cache[query] = suggestions
+        except Exception as e:
+            print(f"Error fetching ingredient suggestions from API: {e}")
+            suggestions = []
+
+    return suggestions
+
+===== FILE: ./app/routes.py =====
+
+from flask import render_template, request, redirect, url_for, jsonify, flash
+from .storage import (
+    get_user_recipes, save_user_recipe, get_user_recipe,
+    update_user_recipe, delete_user_recipe
+    )
+from .api_client import search_recipes, get_recipe_details, get_ingredient_suggestions
+from .utils import (
+    normalize_ingredients, build_cache_key, matching_missing_for_recipe, 
+    sort_recipes, validate_name, validate_ingredients, validate_instructions, 
+    format_instructions, validate_recipe_form
+    )
+
+recipe_cache = {}
+
+def init_routes(app):
+    @app.route('/')
+    def home():
+        return render_template("index.html")
+
+    @app.route('/results')
+    def results():
+        """ 
+        displays recipe search results based on user ingredients and sort preference
+        """
+        raw_input = request.args.get("ingredients", "")
+        sort_by = request.args.get("sort_by", "weighted")
+
+        if raw_input:
+            user_ingredients = normalize_ingredients(raw_input)
+            key = build_cache_key(user_ingredients)
+
+            if key in recipe_cache:
+                recipes = recipe_cache[key]
+            else:
+                api_results = search_recipes(user_ingredients)
+                recipes = matching_missing_for_recipe(user_ingredients, api_results)
+                recipe_cache[key] = recipes
+
+            recipes = sort_recipes(recipes, sort_by)
+        else:
+            recipes = []
+
+        return render_template(
+            "results.html",
+            recipes=recipes,
+            ingredients=raw_input,
+            sort_by=sort_by
+        )
+
+    @app.route('/recipe/<int:recipe_id>')
+    def recipe_detail(recipe_id):
+        """
+        fetches and displays recipe steps about a specific recipe
+        """
+        recipe = get_recipe_details(recipe_id)
+        if not recipe:
+            return "Recipe not found", 404
+
+        ingredients = request.args.get("ingredients", "")
+        sort_by = request.args.get("sort_by", "weighted")
+
+        return render_template(
+            "recipe_detail.html",
+            recipe=recipe,
+            ingredients=ingredients,
+            sort_by=sort_by
+        )
+
+    # ---------- MY RECIPES CRUD ----------
+
+    @app.route('/my_recipes')
+    def my_recipes():
+        recipes = get_user_recipes()
+        return render_template("my_recipes.html", recipes=recipes)
+
+    @app.route('/my_recipes/new', methods=['GET', 'POST'])
+    def new_recipe():
+        """
+        handles both displaying the form and processing form submissions for new recipes
+        """
+        if request.method == "POST":
+            name = request.form.get("name", "").title().strip()
+            raw_ingredients = request.form.get("ingredients", "")
+            steps = request.form.getlist("instructions[]")
+
+            valid, msg, ingredients, instructions = validate_recipe_form(name, raw_ingredients, steps)
+            if not valid:
+                flash(msg, "error")
+                return render_template("recipe_form.html", recipe=None)
+
+            save_user_recipe(name, ingredients, instructions, source="user", api_id=None)
+            return redirect(url_for("my_recipes"))
+
+        return render_template("recipe_form.html", recipe=None)
+
+
+    @app.route('/my_recipes/<int:recipe_id>/edit', methods=['GET', 'POST'])
+    def edit_recipe(recipe_id):
+        """
+        displaying the edit form and updating a user's recipe (valdiation)
+        """
+        recipe = get_user_recipe(recipe_id)
+        if not recipe:
+            return "Recipe not found", 404
+
+        if recipe.get("source") != "user":
+            return "Editing is not allowed for recipes saved from the API.", 403
+
+        if request.method == "POST":
+            name = request.form.get("name", "").title().strip()
+            raw_ingredients = request.form.get("ingredients", "")
+            steps = request.form.getlist("instructions[]")
+
+            valid, msg, ingredients, instructions = validate_recipe_form(name, raw_ingredients, steps)
+            if not valid:
+                flash(msg, "error")
+                return render_template("recipe_form.html", recipe=recipe)
+
+            updated = update_user_recipe(recipe_id, name, ingredients, instructions)
+            if not updated:
+                flash("Unable to update recipe.", "error")
+                return render_template("recipe_form.html", recipe=recipe)
+
+            return redirect(url_for("my_recipes"))
+
+
+        recipe_steps = recipe.get("instructions", "").split("\n")
+        return render_template("recipe_form.html", recipe=recipe, recipe_steps=recipe_steps)
+
+    @app.route('/my_recipes/<int:recipe_id>/delete', methods=['POST'])
+    def delete_recipe(recipe_id):
+        delete_user_recipe(recipe_id)
+        return redirect(url_for('my_recipes'))
+
+    # ---------- API Save (saving an API result into DB) ----------
+    @app.route('/save_recipe', methods=['POST'])
+    def save_recipe():
+        """saving a recipe coming from the API to my recipes"""
+        name = request.form.get("name", "").title().strip()
+        raw_ingredients = request.form.get("ingredients", "")
+        steps = request.form.get("instructions", "").split("\n")
+        api_id_raw = request.form.get("api_id")
+        api_id = int(api_id_raw) if api_id_raw and api_id_raw.isdigit() else None
+
+
+        valid, msg, ingredients, instructions = validate_recipe_form(name, raw_ingredients, steps)
+        if not valid:
+            flash(msg, "error")
+            return redirect(request.referrer or url_for("home"))
+
+        save_user_recipe(name, ingredients, instructions, source="api", api_id=api_id)
+        return redirect(url_for("my_recipes"))
+
+
+    @app.route("/ingredient_suggestions")
+    def ingredient_suggestions():
+        """
+        provides ingredient suggestions for autocomplete as JSON (autocomplete)
+        """
+        query = request.args.get("query", "").strip()
+        suggestions = get_ingredient_suggestions(query)
+        return jsonify(suggestions)
+
+===== FILE: ./app/templates/index.html =====
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ShelfChef - Recipe Suggester</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #ffffff;
+            color: #333333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #FF6B00;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .form-container {
+            max-width: 450px;
+            width: 90%; 
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            position: relative; 
+        }
+
+        input[type="text"] {
+            width: 70%;
+            padding: 8px 12px;
+            border: 2px solid #FF6B00;
+            border-radius: 6px;
+            margin-right: 5px;
+            outline: none;
+            transition: border 0.2s;
+        }
+
+        input[type="text"]:focus {
+            border-color: #FF8C42;
+        }
+
+        button {
+            background-color: #FF6B00;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 14px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        button:hover {
+            background-color: #FF8C42;
+            transform: scale(1.05);
+        }
+
+        .chips-container {
+            display: flex;
+            flex-wrap: wrap;  
+            gap: 8px;
+            margin-top: 15px;
+        }
+
+        .chip {
+            background-color: #fff4e6;
+            border: 1px solid #FF6B00;
+            padding: 6px 12px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+
+        .chip:hover {
+            transform: scale(1.05);
+        }
+
+        .chip button {
+            background: none;
+            border: none;
+            margin-left: 6px;
+            cursor: pointer;
+            color: #FF6B00;
+            font-weight: bold;
+        }
+
+        #suggestions {
+            border: 1px solid #FF6B00;
+            display: none;
+            position: absolute;
+            background-color: #ffffff;
+            max-height: 150px;
+            overflow-y: auto;
+            overflow-x: hidden;     
+            width: calc(100% - 0px);  
+            padding: 0;
+            margin: 0;
+            list-style-type: none;
+            z-index: 1000;
+            border-radius: 6px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            white-space: nowrap;      
+        }
+
+        #suggestions li {
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        #suggestions li:hover {
+            background-color: #fff4e6;
+        }
+
+        a button {
+            margin-top: 15px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to ShelfChef!</h1>
+
+    <div class="form-container">
+        <form id="ingredient-form" action="/results" method="get">
+            <label for="ingredient-input">Add ingredient:</label><br>
+            <input type="text" id="ingredient-input" autocomplete="off">
+            <button type="button" id="add-btn">+</button>
+            <ul id="suggestions"></ul>
+            <div class="chips-container" id="chips-container"></div>
+            <input type="hidden" name="ingredients" id="hidden-ingredients">
+            <br><br>
+            <button type="submit">Search Recipes</button>
+        </form>
+    </div>
+
+    <br>
+    <a href="{{ url_for('my_recipes') }}">
+        <button type="button">Go to My Recipes</button>
+    </a>
+
+    <script>
+        const input = document.getElementById("ingredient-input");
+        const addBtn = document.getElementById("add-btn");
+        const chipsContainer = document.getElementById("chips-container");
+        const hiddenInput = document.getElementById("hidden-ingredients");
+        const suggestions = document.getElementById("suggestions");
+
+        let ingredients = [];
+
+        function updateHiddenInput() {
+            hiddenInput.value = ingredients.join(",");
+        }
+
+        function addChip(ingredient) {
+            if(!ingredient || ingredients.includes(ingredient.toLowerCase())) return;
+            ingredients.push(ingredient.toLowerCase());
+            updateHiddenInput();
+
+            const chip = document.createElement("div");
+            chip.className = "chip";
+            chip.textContent = ingredient;
+
+            const removeBtn = document.createElement("button");
+            removeBtn.textContent = "x";
+            removeBtn.onclick = () => {
+                chipsContainer.removeChild(chip);
+                ingredients = ingredients.filter(i => i !== ingredient.toLowerCase());
+                updateHiddenInput();
+            };
+
+            chip.appendChild(removeBtn);
+            chipsContainer.appendChild(chip);
+            input.value = "";
+            suggestions.style.display = "none";
+        }
+
+        addBtn.addEventListener("click", () => {
+            addChip(input.value.trim());
+        });
+
+        input.addEventListener("keydown", e => {
+            if(e.key === "Enter") {
+                e.preventDefault();
+                addChip(input.value.trim());
+            }
+        });
+
+        // Fetch suggestions
+        let timer;
+        input.addEventListener("input", () => {
+            clearTimeout(timer);
+            const query = input.value.trim();
+            if(!query) {
+                suggestions.style.display = "none";
+                return;
+            }
+            timer = setTimeout(async () => {
+                try {
+                    const res = await fetch(`/ingredient_suggestions?query=${query}`);
+                    const data = await res.json();
+                    if(!data.length) {
+                        suggestions.style.display = "none";
+                        return;
+                    }
+                    suggestions.innerHTML = data.map(item => `<li class="suggestion-item">${item}</li>`).join('');
+                    suggestions.style.display = "block";
+                } catch(err) {
+                    console.error(err);
+                    suggestions.style.display = "none";
+                }
+            }, 200);
+        });
+
+        suggestions.addEventListener("click", e => {
+            if(e.target.classList.contains("suggestion-item")){
+                addChip(e.target.textContent);
+            }
+        });
+
+        document.addEventListener("click", e => {
+            if(!suggestions.contains(e.target) && e.target !== input){
+                suggestions.style.display = "none";
+            }
+        });
+    </script>
+</body>
+</html>
+
+
+===== FILE: ./app/templates/recipe_detail.html =====
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ recipe.name }}</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #ffffff;
+            color: #333333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #FF6B00;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            color: #FF6B00;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+
+        img {
+            display: block;
+            margin: 0 auto 20px auto;
+            width: 100%;
+            max-width: 300px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        ul {
+            list-style-type: disc;
+            padding-left: 40px;
+        }
+
+        p {
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background-color: #FF6B00;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 18px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s, transform 0.2s;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background-color: #FF8C42;
+            transform: scale(1.05);
+        }
+
+        form {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        a {
+            text-decoration: none;
+        }
+
+        a button {
+            display: inline-block;
+            margin-top: 15px;
+            width: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>{{ recipe.name }}</h1>
+
+    {% if recipe.image and recipe.image.strip() %}
+        <img src="{{ recipe.image }}" alt="{{ recipe.name }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div style="width:100%; max-width:300px; height:225px; display:none; align-items:center; justify-content:center; background-color:#f0f0f0; border-radius:12px; margin:0 auto 20px auto; color:#888; font-size:16px; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+            No image available
+        </div>
+    {% else %}
+        <div style="width:100%; max-width:300px; height:225px; display:flex; align-items:center; justify-content:center; background-color:#f0f0f0; border-radius:12px; margin:0 auto 20px auto; color:#888; font-size:16px; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+            No image available
+        </div>
+    {% endif %}
+
+    <h2>Ingredients:</h2>
+    <ul>
+        {% for ing in recipe.ingredients %}
+            <li>{{ ing }}</li>
+        {% endfor %}
+    </ul>
+
+    <h2>Instructions:</h2>
+    <p>{{ recipe.instructions | safe }}</p>
+
+    <form action="{{ url_for('save_recipe') }}" method="post">
+        <input type="hidden" name="name" value="{{ recipe.name }}">
+        <input type="hidden" name="ingredients" value="{{ recipe.ingredients | join(',') }}">
+        <input type="hidden" name="instructions" value="{{ recipe.instructions | join(' || ') }}">
+        <button type="submit">Save Recipe</button>
+    </form>
+
+    <div style="text-align: center; margin-top: 20px;">
+        <a href="{{ url_for('results', ingredients=ingredients, sort_by=sort_by) }}">
+            <button type="button">Back to Results</button>
+        </a>       
+    </div>
+</body>
+</html>
+
+
+===== FILE: ./app/templates/my_recipes.html =====
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My Recipes</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #ffffff;
+            color: #333333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #FF6B00;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        a.create-new {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #ffffff;
+            background-color: #FF6B00;
+            padding: 8px 14px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        a.create-new:hover {
+            background-color: #FF8C42;
+            transform: scale(1.05);
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        li {
+            background-color: #ffffff;
+            border: 2px solid #FF6B00;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        li:hover {
+            transform: scale(1.02);
+            box-shadow: 0 6px 18px rgba(255,107,0,0.3);
+        }
+
+        li h2 {
+            color: #333333;
+            margin: 10px 0;
+            text-align: center;
+        }
+
+        li p {
+            margin: 6px 0;
+            font-size: 14px;
+        }
+
+        li form button {
+            background-color: #FF6B00;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s, transform 0.2s;
+            margin-top: 8px;
+        }
+
+        li form button:hover {
+            background-color: #FF8C42;
+            transform: scale(1.05);
+        }
+
+        a.edit-link {
+            color: #FF6B00;
+            text-decoration: none;
+            margin-right: 10px;
+            font-weight: 500;
+            transition: color 0.2s, transform 0.2s;
+        }
+
+        a.edit-link:hover {
+            color: #FF8C42;
+            transform: scale(1.05);
+        }
+
+        a.disabled-edit {
+            color: #999999;
+            cursor: not-allowed;
+        }
+
+        .bottom-link {
+            display: block;
+            text-align: center;
+            margin-top: 30px;
+            color: #FF6B00;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .bottom-link:hover {
+            color: #FF8C42;
+        }
+
+        p.no-recipes {
+            text-align: center;
+            font-style: italic;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>My Saved Recipes</h1>
+
+    <a class="create-new" href="{{ url_for('new_recipe') }}">➕ Create New Recipe</a>
+
+    {% if recipes %}
+        <ul>
+        {% for recipe in recipes %}
+            <li>
+                <h2>{{ recipe.name }}</h2>
+                <p><strong>Ingredients:</strong> {{ recipe.ingredients | join(', ') }}</p>
+                <p><strong>Instructions:</strong> {{ recipe.instructions }}</p>
+                <p><em>Saved from: {{ recipe.source }}</em></p>
+
+                {% if recipe.source == 'user' %}
+                    <a class="edit-link" href="{{ url_for('edit_recipe', recipe_id=recipe.id) }}">✏️ Edit</a>
+                {% else %}
+                    <span class="disabled-edit" title="API-sourced recipes cannot be edited">✏️ Edit (disabled)</span>
+                {% endif %}
+
+                <form action="{{ url_for('delete_recipe', recipe_id=recipe.id) }}" method="post" style="display:inline;">
+                    <button type="submit" onclick="return confirm('Are you sure you want to delete this recipe?');">🗑️ Delete</button>
+                </form>
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p class="no-recipes">You haven't saved any recipes yet.</p>
+    {% endif %}
+
+    <a class="bottom-link" href="/">⬅ Back to search</a>
+</body>
+</html>
+
+
+===== FILE: ./app/templates/recipe_form.html =====
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% if recipe %}Edit Recipe{% else %}New Recipe{% endif %}</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* Global */
+        *, *::before, *::after {
+            box-sizing: border-box; /* Fix input overflow */
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #ffffff;
+            color: #333333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #FF6B00;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        form {
+            max-width: 500px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 20px;
+            border-radius: 12px;
+            border: 2px solid #FF6B00;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        label {
+            font-weight: 500;
+        }
+
+        /* Text Inputs */
+        input[type="text"], .instruction-step input, #ingredient-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 2px solid #FF6B00;
+            border-radius: 6px;
+            margin-top: 5px;
+            margin-bottom: 15px;
+            outline: none;
+            transition: border 0.2s;
+        }
+
+        input[type="text"]:focus, .instruction-step input:focus, #ingredient-input:focus {
+            border-color: #FF8C42;
+        }
+
+        /* Buttons */
+        button {
+            background-color: #FF6B00;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s, transform 0.2s;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background-color: #FF8C42;
+            transform: scale(1.05);
+        }
+
+        /* Ingredient tags */
+        #ingredient-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .tag {
+            display: flex;
+            align-items: center;
+            background-color: #fff4e6;
+            border: 1px solid #FF6B00;
+            padding: 6px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+
+        .tag:hover {
+            transform: scale(1.05);
+        }
+
+        .remove-tag {
+            cursor: pointer;
+            margin-left: 6px;
+            color: #FF6B00;
+            font-weight: bold;
+        }
+
+        /* Instruction steps */
+        .instruction-step {
+            margin-bottom: 10px;
+        }
+
+        #add-step {
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+
+        /* Back link */
+        a.back-link {
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: #FF6B00;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        a.back-link:hover {
+            color: #FF8C42;
+        }
+    </style>
+</head>
+<body>
+    <h1>{% if recipe %}Edit Recipe{% else %}Create New Recipe{% endif %}</h1>
+
+    <form method="post" id="recipeForm">
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" value="{{ recipe.name if recipe else '' }}" required>
+
+        <label>Ingredients:</label>
+        <div id="ingredient-tags">
+            {% if recipe %}
+                {% for ing in recipe.ingredients %}
+                    <span class="tag">{{ ing }}<span class="remove-tag">x</span></span>
+                {% endfor %}
+            {% endif %}
+            <input type="text" id="ingredient-input" placeholder="Type ingredient and press Enter">
+        </div>
+        <input type="hidden" name="ingredients" id="ingredients-hidden">
+
+        <label>Instructions:</label>
+        <div id="instructions-container">
+            {% if recipe %}
+                {% for step in recipe.instructions.split('\n') %}
+                    <div class="instruction-step">
+                        <input type="text" name="instructions[]" value="{{ step.split('. ', 1)[1] if '. ' in step else step }}" required>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="instruction-step"><input type="text" name="instructions[]" placeholder="Step 1" required></div>
+                <div class="instruction-step"><input type="text" name="instructions[]" placeholder="Step 2" required></div>
+            {% endif %}
+        </div>
+        <button type="button" id="add-step">+ Add Step</button>
+
+        <button type="submit">{% if recipe %}Update{% else %}Save{% endif %}</button>
+    </form>
+
+    <a class="back-link" href="{{ url_for('my_recipes') }}">⬅ Back to My Recipes</a>
+
+    <script>
+        const ingredientInput = document.getElementById('ingredient-input');
+        const tagsContainer = document.getElementById('ingredient-tags');
+        const hiddenIngredients = document.getElementById('ingredients-hidden');
+
+        function updateHiddenIngredients() {
+            const tags = Array.from(tagsContainer.querySelectorAll('.tag')).map(tag => tag.firstChild.textContent);
+            hiddenIngredients.value = tags.join(',');
+        }
+
+        tagsContainer.addEventListener('click', function(e) {
+            if (e.target.classList.contains('remove-tag')) {
+                e.target.parentElement.remove();
+                updateHiddenIngredients();
+            }
+        });
+
+        ingredientInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && ingredientInput.value.trim() !== '') {
+                e.preventDefault();
+                const tag = document.createElement('span');
+                tag.className = 'tag';
+                tag.innerHTML = ingredientInput.value.trim() + '<span class="remove-tag">x</span>';
+                tagsContainer.insertBefore(tag, ingredientInput);
+                ingredientInput.value = '';
+                updateHiddenIngredients();
+            }
+        });
+
+        document.getElementById('add-step').addEventListener('click', function() {
+            const div = document.createElement('div');
+            div.className = 'instruction-step';
+            div.innerHTML = '<input type="text" name="instructions[]" placeholder="Step" required>';
+            document.getElementById('instructions-container').appendChild(div);
+        });
+
+        updateHiddenIngredients();
+    </script>
+</body>
+</html>
+
+
+===== FILE: ./app/templates/results.html =====
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Search Results</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #ffffff;
+            color: #333333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            color: #FF6B00;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        /* Sorting form */
+        form {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        select {
+            padding: 6px 10px;
+            border: 2px solid #FF6B00;
+            border-radius: 6px;
+            outline: none;
+        }
+
+        select:focus {
+            border-color: #FF8C42;
+        }
+
+        button {
+            background-color: #FF6B00;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 14px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        button:hover {
+            background-color: #FF8C42;
+            transform: scale(1.05);
+        }
+
+        /* Recipe list */
+        ul {
+            list-style-type: none;
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        li {
+            background-color: #ffffff;
+            border: 2px solid #FF6B00;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        li:hover {
+            transform: scale(1.02);
+            box-shadow: 0 6px 18px rgba(255,107,0,0.3);
+        }
+
+        li img {
+            width: 100%;
+            max-width: 200px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        li h2 {
+            color: #333333;
+            margin: 10px 0 5px 0;
+            text-align: center;
+        }
+
+        li p {
+            margin: 4px 0;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        li form button {
+            margin-top: 10px;
+            width: 100%;
+        }
+
+        /* Links at bottom */
+        .bottom-links {
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        .bottom-links a {
+            color: #FF6B00;
+            text-decoration: none;
+            margin: 0 10px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .bottom-links a:hover {
+            color: #FF8C42;
+        }
+    </style>
+</head>
+<body>
+    <h1>Search Results for: {{ ingredients }}</h1>
+
+    <!-- sorting Options -->
+    <form method="get" action="{{ url_for('results') }}">
+        <input type="hidden" name="ingredients" value="{{ ingredients }}">
+        <label for="sort_by">Sort by:</label>
+        <select name="sort_by" id="sort_by">
+            <option value="weighted" {% if sort_by == 'weighted' %}selected{% endif %}>Weighted (default)</option>
+            <option value="matches" {% if sort_by == 'matches' %}selected{% endif %}>Most Matches</option>
+            <option value="missing" {% if sort_by == 'missing' %}selected{% endif %}>Least Missing Ingredients</option>
+        </select>
+        <button type="submit">Sort</button>
+    </form>
+
+    {% if recipes %}
+        <ul>
+        {% for recipe in recipes %}
+            <li>
+                <h2>{{ recipe.name }}</h2>
+
+                {% if recipe.image and recipe.image.strip() %}
+                <img src="{{ recipe.image }}" alt="{{ recipe.name }}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                <div style="width:200px; height:150px; display:none; align-items:center; justify-content:center; background-color:#f0f0f0; border-radius:8px; margin-bottom:10px; color:#888; font-size:14px;">
+                    No image available
+                </div>
+                {% else %}
+                <div style="width:200px; height:150px; display:flex; align-items:center; justify-content:center; background-color:#f0f0f0; border-radius:8px; margin-bottom:10px; color:#888; font-size:14px;">
+                    No image available
+                </div>
+                {% endif %}
+
+
+                <p>Matching Ingredients: {{ recipe.matches | join(', ') }}</p>
+                <p>Missing Ingredients: {{ recipe.missing_count }}</p>
+
+                <form action="{{ url_for('recipe_detail', recipe_id=recipe.id) }}" method="get">
+                    <input type="hidden" name="ingredients" value="{{ ingredients }}">
+                    <input type="hidden" name="sort_by" value="{{ sort_by }}">
+                    <button type="submit">See Full Recipe</button>
+                </form>
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p style="text-align:center;">No recipes found with these ingredients.</p>
+    {% endif %}
+
+    <div class="bottom-links">
+        <a href="/">Back to search</a> | <a href="{{ url_for('my_recipes') }}">My Recipes</a>
+    </div>
+</body>
+</html>
+
+
+===== FILE: ./tests/test_api_client.py =====
+
+
+import pytest
+from unittest.mock import patch, MagicMock
+from app import api_client
+
+
+
+@pytest.mark.parametrize(
+    "input_text, expected",
+    [
+        ("Tomatoes", "tomato"),
+        ("tomato", "tomato"),
+        ("  Onion  ", "onion"),
+        ("Onions", "onion"),
+        ("Eggs", "egg"),
+        ("Berries", "berry"),
+        ("Cherries", "cherry"),
+        ("dishes", "dish"),
+        ("Glasses", "glass"),   
+        ("Kiwi", "kiwi"),       
+        ("fish", "fish"),      
+        ("Potatoes", "potato"), 
+        ("Boxes", "box"),
+    ]
+)
+def test_normalize_ingredient_extended(input_text, expected):
+    assert api_client.normalize_ingredient(input_text) == expected
+
+
+
+@patch("app.api_client.requests.get")
+def test_search_recipes_success(mock_get):
+    mock_response_main = MagicMock()
+    mock_response_main.status_code = 200
+    mock_response_main.json.return_value = [
+        {"id": 1, "title": "Pizza", "usedIngredients": [{"name": "cheese"}], "missedIngredients": [{"name": "tomato"}]}
+    ]
+    
+    mock_response_details = MagicMock()
+    mock_response_details.status_code = 200
+    mock_response_details.json.return_value = {
+        "title": "Pizza",
+        "instructions": "Bake it",
+        "image": "pizza.png",
+        "sourceUrl": "http://example.com",
+        "extendedIngredients": [{"name": "cheese"}, {"name": "tomato"}]
+    }
+
+    mock_get.side_effect = [mock_response_main, mock_response_details]
+
+    recipes = api_client.search_recipes(["cheese", "tomato"])
+    assert len(recipes) == 1
+    r = recipes[0]
+    assert r["name"] == "Pizza"
+    assert "cheese" in r["ingredients"]
+    assert "tomato" in r["ingredients"]
+    assert r["instructions"] == "Bake it"
+    assert r["image"] == "pizza.png"
+    assert r["sourceUrl"] == "http://example.com"
+    assert r["missing_ingredients"] == 1
+
+@patch("app.api_client.requests.get")
+def test_search_recipes_api_failure(mock_get):
+    mock_response = MagicMock()
+    mock_response.status_code = 500
+    mock_get.return_value = mock_response
+
+    recipes = api_client.search_recipes(["cheese"])
+    assert recipes == []
+
+
+@patch("app.api_client.requests.get")
+def test_get_recipe_details_success(mock_get):
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "title": "Salad",
+        "instructions": "Mix it",
+        "image": "salad.png",
+        "sourceUrl": "http://example.com",
+        "extendedIngredients": [{"name": "lettuce"}, {"name": "tomato"}]
+    }
+    mock_get.return_value = mock_response
+
+    r = api_client.get_recipe_details(42)
+    assert r["name"] == "Salad"
+    assert "lettuce" in r["ingredients"]
+    assert "tomato" in r["ingredients"]
+
+@patch("app.api_client.requests.get")
+def test_get_recipe_details_failure(mock_get):
+    mock_response = MagicMock()
+    mock_response.status_code = 404
+    mock_get.return_value = mock_response
+
+    r = api_client.get_recipe_details(999)
+    assert r is None
+
+
+@patch("sqlite3.connect")
+def test_get_common_ingredients_from_db(mock_connect):
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = [("Tomatoes",), ("Onion",)]
+    mock_conn.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_conn
+
+    ingredients = api_client.get_common_ingredients_from_db()
+    assert "tomato" in ingredients
+    assert "onion" in ingredients
+
+
+@patch("sqlite3.connect")
+def test_get_ingredient_suggestions_db_hit(mock_connect):
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = [("Tomato",), ("Tomatillo",)]
+    mock_conn.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_conn
+
+    api_client.ingredient_cache.clear()
+    suggestions = api_client.get_ingredient_suggestions("tom")
+    assert "tomato" in suggestions
+    assert "tomatillo" in suggestions
+
+@patch("requests.get")
+@patch("sqlite3.connect")
+def test_get_ingredient_suggestions_api_fallback(mock_connect, mock_requests):
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = []
+    mock_conn.cursor.return_value = mock_cursor
+    mock_connect.return_value = mock_conn
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = [{"name": "cucumber"}, {"name": "carrot"}]
+    mock_requests.return_value = mock_resp
+
+    api_client.ingredient_cache.clear()
+    suggestions = api_client.get_ingredient_suggestions("cu")
+    assert "cucumber" in suggestions
+    assert "carrot" in suggestions
+
+def test_get_ingredient_suggestions_empty_query():
+    with patch("app.api_client.get_common_ingredients_from_db") as mock_common:
+        mock_common.return_value = ["salt", "pepper"]
+        suggestions = api_client.get_ingredient_suggestions("")
+        assert "salt" in suggestions
+        assert "pepper" in suggestions
+
+
+===== FILE: ./tests/test_routes.py =====
+
+import pytest
+from app import create_app
+import app.routes as routes_module
+
+
+@pytest.fixture
+def client():
+    app = create_app()
+    app.testing = True
+    return app.test_client()
+
+
+# ---------- /results ----------
+def test_results_with_query_and_sorting(monkeypatch, client):
+    monkeypatch.setattr(
+        routes_module, "search_recipes",
+        lambda ingredients: [
+            {"id": 1, "name": "Pizza", "ingredients": ["cheese", "tomato"]},
+            {"id": 2, "name": "Salad", "ingredients": ["lettuce", "tomato"]},
+        ]
+    )
+
+    resp = client.get("/results?ingredients=cheese,tomato&sort_by=matches")
+    assert resp.status_code == 200
+    assert b"Pizza" in resp.data or b"Salad" in resp.data
+
+
+def test_results_empty_query(client):
+    resp = client.get("/results")
+    assert resp.status_code == 200
+    assert b"No recipes" in resp.data or b"No recipes found" in resp.data
+
+
+# ---------- /recipe/<id> ----------
+def test_recipe_detail_found(monkeypatch, client):
+    monkeypatch.setattr(
+        routes_module, "get_recipe_details",
+        lambda rid: {"id": rid, "name": "Pizza", "ingredients": ["cheese"], "instructions": "Bake"}
+    )
+    resp = client.get("/recipe/1")
+    assert resp.status_code == 200
+    assert b"Pizza" in resp.data
+
+
+def test_recipe_detail_not_found(monkeypatch, client):
+    monkeypatch.setattr(routes_module, "get_recipe_details", lambda rid: None)
+    resp = client.get("/recipe/999")
+    assert resp.status_code == 404
+
+
+# ---------- /my_recipes ----------
+def test_my_recipes(monkeypatch, client):
+    monkeypatch.setattr(routes_module, "get_user_recipes", lambda: [{"id": 1, "name": "Soup"}])
+    resp = client.get("/my_recipes")
+    assert resp.status_code == 200
+    assert b"Soup" in resp.data
+
+
+# ---------- /my_recipes/new ----------
+def test_new_recipe_get(client):
+    resp = client.get("/my_recipes/new")
+    assert resp.status_code == 200
+    assert b"form" in resp.data or b"Recipe" in resp.data
+
+
+def test_new_recipe_post_valid(monkeypatch, client):
+    called = {}
+
+    def fake_save(name, ingredients, instructions, source, api_id):
+        called["ok"] = True
+
+    monkeypatch.setattr(routes_module, "save_user_recipe", fake_save)
+
+    resp = client.post("/my_recipes/new", data={
+        "name": "Test Soup",
+        "ingredients": "water,salt",
+        "instructions[]": ["Boil water", "Add salt"]
+    }, follow_redirects=True)
+
+    assert resp.status_code == 200
+    assert "ok" in called
+
+
+def test_new_recipe_post_invalid(client):
+    resp = client.post("/my_recipes/new", data={
+        "name": "", "ingredients": "", "instructions[]": []
+    }, follow_redirects=True)
+    # Redirects anyway, but nothing saved
+    assert resp.status_code == 200
+
+
+# ---------- /my_recipes/<id>/edit ----------
+def test_edit_recipe_get(monkeypatch, client):
+    monkeypatch.setattr(routes_module, "get_user_recipe", lambda rid: {
+        "id": rid, "name": "Soup", "ingredients": ["water"], "instructions": "Boil", "source": "user"
+    })
+    resp = client.get("/my_recipes/1/edit")
+    assert resp.status_code == 200
+    assert b"Soup" in resp.data
+
+
+def test_edit_recipe_not_found(monkeypatch, client):
+    monkeypatch.setattr(routes_module, "get_user_recipe", lambda rid: None)
+    resp = client.get("/my_recipes/999/edit")
+    assert resp.status_code == 404
+
+
+def test_edit_recipe_forbidden(monkeypatch, client):
+    monkeypatch.setattr(routes_module, "get_user_recipe", lambda rid: {"id": rid, "source": "api"})
+    resp = client.get("/my_recipes/1/edit")
+    assert resp.status_code == 403
+
+
+def test_edit_recipe_post_valid(monkeypatch, client):
+    monkeypatch.setattr(routes_module, "get_user_recipe", lambda rid: {
+        "id": rid, "name": "Soup", "ingredients": ["water"], "instructions": "Boil", "source": "user"
+    })
+    monkeypatch.setattr(routes_module, "update_user_recipe", lambda *a, **kw: True)
+
+    resp = client.post("/my_recipes/1/edit", data={
+        "name": "New Soup",
+        "ingredients": "water,salt",
+        "instructions[]": ["Boil water", "Add salt"]
+    }, follow_redirects=True)
+
+    assert resp.status_code == 200
+
+
+def test_edit_recipe_post_update_fail(monkeypatch, client):
+    monkeypatch.setattr(routes_module, "get_user_recipe", lambda rid: {
+        "id": rid, "name": "Soup", "ingredients": ["water"], "instructions": "Boil", "source": "user"
+    })
+    monkeypatch.setattr(routes_module, "update_user_recipe", lambda *a, **kw: False)
+
+    resp = client.post("/my_recipes/1/edit", data={
+        "name": "Bad Soup",
+        "ingredients": "water",
+        "instructions[]": ["Just fail"]
+    })
+    assert resp.status_code == 200
+
+
+
+# ---------- /my_recipes/<id>/delete ----------
+def test_delete_recipe(monkeypatch, client):
+    monkeypatch.setattr(routes_module, "delete_user_recipe", lambda rid: True)
+    resp = client.post("/my_recipes/1/delete", follow_redirects=True)
+    assert resp.status_code == 200
+
+
+# ---------- /save_recipe ----------
+def test_save_recipe_valid(monkeypatch, client):
+    called = {}
+
+    def fake_save(name, ingredients, instructions, source, api_id):
+        called["saved"] = (name, ingredients, instructions, source, api_id)
+
+    monkeypatch.setattr(routes_module, "save_user_recipe", fake_save)
+
+    resp = client.post("/save_recipe", data={
+        "name": "API Soup",
+        "ingredients": "water,salt",
+        "instructions": "Boil",
+        "api_id": "42"
+    }, follow_redirects=True)
+
+    assert resp.status_code == 200
+    assert "saved" in called
+    assert called["saved"][3] == "api"
+
+
+def test_save_recipe_invalid(client):
+    resp = client.post("/save_recipe", data={
+        "name": "", "ingredients": "", "instructions": ""
+    }, follow_redirects=True)
+    assert resp.status_code == 200  
+
+
+# ---------- /ingredient_suggestions ----------
+def test_ingredient_suggestions(monkeypatch, client):
+    monkeypatch.setattr(routes_module, "get_ingredient_suggestions", lambda q: ["salt", "sugar"])
+    resp = client.get("/ingredient_suggestions?query=s")
+    assert resp.status_code == 200
+    assert b"salt" in resp.data
+    assert b"sugar" in resp.data
+
+
+
+# ---------- Edge Cases / Cache & Error Handling ----------
+
+def test_recipe_detail_not_found(monkeypatch, client):
+    monkeypatch.setattr(routes_module, "get_recipe_details", lambda rid: None)
+    resp = client.get("/recipe/999")
+    assert resp.status_code == 404
+    assert b"Recipe not found" in resp.data
+
+
+def test_edit_recipe_not_found(monkeypatch, client):
+    monkeypatch.setattr(routes_module, "get_user_recipe", lambda rid: None)
+    resp = client.get("/my_recipes/123/edit")
+    assert resp.status_code == 404
+    assert b"Recipe not found" in resp.data
+
+
+def test_edit_recipe_forbidden(monkeypatch, client):
+    monkeypatch.setattr(
+        routes_module,
+        "get_user_recipe",
+        lambda rid: {"id": rid, "source": "api", "instructions": "Step 1"}
+    )
+    resp = client.get("/my_recipes/123/edit")
+    assert resp.status_code == 403
+    assert b"not allowed" in resp.data.lower()
+
+
+def test_edit_recipe_update_fails(monkeypatch, client):
+    monkeypatch.setattr(
+        routes_module,
+        "get_user_recipe",
+        lambda rid: {"id": rid, "source": "user", "instructions": "Step 1"}
+    )
+    monkeypatch.setattr(routes_module, "update_user_recipe", lambda *a, **kw: False)
+
+    resp = client.post(
+        "/my_recipes/123/edit",
+        data={"name": "Test", "ingredients": "cheese", "instructions[]": "Bake"},
+    )
+    assert resp.status_code == 200
+
+
+def test_results_cache_reuse(monkeypatch, client):
+    called = {"count": 0}
+
+    def fake_search(user_ingredients):
+        called["count"] += 1
+        return [{"id": 1, "name": "Pizza", "ingredients": ["cheese", "tomato"]}]
+
+    monkeypatch.setattr(routes_module, "search_recipes", fake_search)
+
+    routes_module.recipe_cache.clear()
+
+    resp1 = client.get("/results?ingredients=cheese,tomato")
+    assert resp1.status_code == 200
+    assert called["count"] == 1
+
+    resp2 = client.get("/results?ingredients=cheese,tomato")
+    assert resp2.status_code == 200
+    assert called["count"] == 1  
+
+
+
+===== FILE: ./tests/test_storage.py =====
+
+import pytest
+import sqlite3
+from unittest.mock import patch
+from app import storage
+
+
+class MockConnection:
+    def __init__(self, real_conn):
+        self._conn = real_conn
+        self.row_factory = real_conn.row_factory
+    
+    def cursor(self):
+        return self._conn.cursor()
+    
+    def commit(self):
+        return self._conn.commit()
+    
+    def close(self):
+        pass
+    
+    def real_close(self):
+        self._conn.close()
+
+
+@pytest.fixture
+def in_memory_db():
+    """Create a fresh in-memory database for each test."""
+    real_conn = sqlite3.connect(":memory:")
+    real_conn.row_factory = sqlite3.Row
+    
+    c = real_conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS my_recipes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            ingredients TEXT,
+            instructions TEXT,
+            source TEXT DEFAULT 'user',
+            api_id INTEGER
+        )
+    """)
+    real_conn.commit()
+    
+    mock_conn = MockConnection(real_conn)
+    
+    with patch("app.storage._get_connection", return_value=mock_conn):
+        yield mock_conn
+    
+    mock_conn.real_close()
+
+
+def sample_recipe():
+    return {
+        "name": "Test Soup",
+        "ingredients": ["water", "salt"],
+        "instructions": "Boil water. Add salt.",
+        "source": "user",
+        "api_id": None
+    }
+
+
+def test_save_and_get_user_recipe(in_memory_db):
+    recipe = sample_recipe()
+    recipe_id = storage.save_user_recipe(**recipe)
+    fetched = storage.get_user_recipe(recipe_id)
+    
+    assert fetched is not None
+    assert fetched["name"] == recipe["name"]
+    assert fetched["ingredients"] == recipe["ingredients"]
+    assert fetched["instructions"] == recipe["instructions"]
+    assert fetched["source"] == "user"
+    assert fetched["editable"] is True
+
+
+def test_get_user_recipes_returns_list(in_memory_db):
+    recipe = sample_recipe()
+    storage.save_user_recipe(**recipe)
+    recipes = storage.get_user_recipes()
+    
+    assert isinstance(recipes, list)
+    assert len(recipes) == 1
+    assert recipes[0]["name"] == recipe["name"]
+
+
+def test_get_user_recipe_missing_returns_none(in_memory_db):
+    result = storage.get_user_recipe(999)
+    assert result is None
+
+
+def test_update_user_recipe_success(in_memory_db):
+    recipe = sample_recipe()
+    rid = storage.save_user_recipe(**recipe)
+    
+    updated = storage.update_user_recipe(rid, "New Name", ["new ingredient"], "New instructions")
+    assert updated is True
+    
+    fetched = storage.get_user_recipe(rid)
+    assert fetched["name"] == "New Name"
+    assert fetched["ingredients"] == ["new ingredient"]
+    assert fetched["instructions"] == "New instructions"
+
+
+def test_update_user_recipe_nonexistent_returns_false(in_memory_db):
+    updated = storage.update_user_recipe(999, "X", ["Y"], "Z")
+    assert updated is False
+
+
+def test_update_user_recipe_api_source_returns_false(in_memory_db):
+    rid = storage.save_user_recipe("API Recipe", ["a"], "b", source="api", api_id=1)
+    
+    updated = storage.update_user_recipe(rid, "X", ["Y"], "Z")
+    assert updated is False
+    
+    fetched = storage.get_user_recipe(rid)
+    assert fetched["name"] == "API Recipe"
+    assert fetched["editable"] is False
+
+
+def test_delete_user_recipe_success(in_memory_db):
+    rid = storage.save_user_recipe(**sample_recipe())
+    
+    deleted = storage.delete_user_recipe(rid)
+    assert deleted is True
+    
+    assert storage.get_user_recipe(rid) is None
+
+
+def test_delete_user_recipe_nonexistent_returns_false(in_memory_db):
+    deleted = storage.delete_user_recipe(999)
+    assert deleted is False
+
+===== FILE: ./tests/test_cache.py =====
+
+import pytest
+
+class FakeCache:
+    def __init__(self):
+        self.store = {}
+
+    def set(self, key, value):
+        self.store[key] = value
+
+    def get(self, key, default=None):
+        return self.store.get(key, default)
+
+
+# ---------- Basic store and retrieve ----------
+def test_cache_store_and_retrieve():
+    cache = FakeCache()
+
+    recipes = [{"id": 1, "name": "Pizza"}, {"id": 2, "name": "Salad"}]
+    ingredients = "cheese,tomato"
+    sort_by = "weighted"
+
+    cache.set("last_results", recipes)
+    cache.set("last_ingredients", ingredients)
+    cache.set("last_sort", sort_by)
+
+    assert cache.get("last_results") == recipes
+    assert cache.get("last_ingredients") == ingredients
+    assert cache.get("last_sort") == sort_by
+
+    assert cache.get("unknown_key", 42) == 42
+
+
+# ---------- Overwriting existing values ----------
+def test_cache_overwrite():
+    cache = FakeCache()
+    cache.set("key", "value1")
+    cache.set("key", "value2")
+    assert cache.get("key") == "value2"
+
+
+# ---------- Storing different types ----------
+def test_cache_various_types():
+    cache = FakeCache()
+    cache.set("int", 123)
+    cache.set("list", [1,2,3])
+    cache.set("dict", {"a": 1})
+    
+    assert cache.get("int") == 123
+    assert cache.get("list") == [1,2,3]
+    assert cache.get("dict") == {"a": 1}
+
+
+# ---------- Clearing the cache ----------
+def test_cache_clear():
+    cache = FakeCache()
+    cache.set("key", "value")
+    cache.store.clear()
+    assert cache.get("key") is None
+
+
+# ---------- Default values for missing keys ----------
+def test_cache_default_for_missing():
+    cache = FakeCache()
+    assert cache.get("missing", default="default") == "default"
+    assert cache.get("missing_list", default=[]) == []
+    assert cache.get("missing_dict", default={"x":1}) == {"x":1}
