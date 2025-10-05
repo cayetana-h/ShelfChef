@@ -58,7 +58,7 @@ It also supports saving your own recipes locally, caching API results for faster
 ## Setup Instructions
 
 ### 1. Create and activate your environment
-`python -m venv venv`
+`python -m venv venv` or `python3 -m venv venv`
 
 
 `source venv/bin/activate     # macOS/Linux`
@@ -73,7 +73,7 @@ It also supports saving your own recipes locally, caching API results for faster
 `python create_db.py`
 
 ### 4. Run App
-`python main.py`
+`python main.py` or `python3 main.py`
 
 ### 5.Running Tests
 `PYTHONPATH=$(pwd) pytest tests     # macOS/Linux`
