@@ -47,13 +47,14 @@ It also supports saving your own recipes locally, caching API results for faster
 
 ---
 
-## Create and activate your environment 
-### 1. Create and activate your environment 
+## Setup Instructions
+
+### 1. Create and activate your environment
 python -m venv venv
 source venv/bin/activate     # macOS/Linux
 venv\Scripts\activate        # Windows
 
-## # 2. Install Dependencies
+### 2. Install Dependencies
 pip install -r requirements.txt
 
 ### 3. Initialize the database
@@ -69,5 +70,5 @@ set PYTHONPATH=%cd% && pytest tests # Windows (PowerShell)
 ## Tools
 Backend: Python, Flask
 Database: SQLite
-Frontend: HTML (Jinja2), CSS, minimal JavaScript
+Frontend: HTML (Jinja2) + CSS
 External API: Spoonacular
