@@ -2,7 +2,7 @@ import requests
 import sqlite3
 from .utils import build_recipe_dict, normalize_ingredient, clean_instructions
 
-API_KEY = "5b40c2b34c7948829d7216978e11b81e"  
+API_KEY = "3f522310e0834471886574d3cef664c5"   
 API_URL = "https://api.spoonacular.com/recipes/findByIngredients"
 RECIPE_DETAILS_URL = "https://api.spoonacular.com/recipes/{id}/information"
 INGREDIENT_AUTOCOMPLETE_URL = "https://api.spoonacular.com/food/ingredients/autocomplete"
