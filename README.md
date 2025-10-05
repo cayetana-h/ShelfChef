@@ -10,7 +10,7 @@ It also supports saving your own recipes locally, caching API results for faster
 .
 ├── README.md
 ├── app
-│   ├── __init__.py
+│   ├── init.py
 │   ├── api_client.py
 │   ├── routes.py
 │   ├── storage.py
@@ -26,11 +26,10 @@ It also supports saving your own recipes locally, caching API results for faster
 ├── main.py
 ├── requirements.txt
 └── tests
-    ├── test_api_client.py
-    ├── test_cache.py
-    ├── test_routes.py
-    └── test_storage.py
-
+├── test_api_client.py
+├── test_cache.py
+├── test_routes.py
+└── test_storage.py
 
 ---
 
