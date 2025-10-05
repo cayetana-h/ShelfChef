@@ -10,26 +10,26 @@ It also supports saving your own recipes locally, caching API results for faster
 .
 ├── README.md
 ├── app
-│ ├── init.py
-│ ├── api_client.py
-│ ├── routes.py
-│ ├── storage.py
-│ ├── templates
-│ │ ├── index.html
-│ │ ├── my_recipes.html
-│ │ ├── recipe_detail.html
-│ │ ├── recipe_form.html
-│ │ └── results.html
-│ └── utils.py
+│   ├── __init__.py
+│   ├── api_client.py
+│   ├── routes.py
+│   ├── storage.py
+│   ├── templates
+│   │   ├── index.html
+│   │   ├── my_recipes.html
+│   │   ├── recipe_detail.html
+│   │   ├── recipe_form.html
+│   │   └── results.html
+│   └── utils.py
 ├── create_db.py
 ├── inspect_db.py
 ├── main.py
 ├── requirements.txt
 └── tests
-├── test_api_client.py
-├── test_cache.py
-├── test_routes.py
-└── test_storage.py
+    ├── test_api_client.py
+    ├── test_cache.py
+    ├── test_routes.py
+    └── test_storage.py
 
 
 ---
