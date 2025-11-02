@@ -4,7 +4,8 @@ from flask import current_app
 from .utils import build_recipe_dict, normalize_ingredient, clean_instructions
 from .storage import get_cached_response, save_cached_response, get_common_ingredients_from_db
 
-
+from dotenv import load_dotenv
+load_dotenv()
 
 ingredient_cache = {}
 
