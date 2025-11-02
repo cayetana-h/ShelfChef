@@ -52,7 +52,6 @@ def _ensure_db():
 
         conn.commit()
 
-_ensure_db()
 
 def _row_to_recipe(row: sqlite3.Row) -> Dict[str, Any]:
     """convertng a DB row to a recipe dict"""

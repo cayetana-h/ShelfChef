@@ -166,7 +166,7 @@
         <button type="submit">{% if recipe %}Update{% else %}Save{% endif %}</button>
     </form>
 
-    <a class="back-link" href="{{ url_for('my_recipes') }}">⬅ Back to My Recipes</a>
+    <a class="back-link" href="{{ url_for('main.my_recipes') }}">⬅ Back to My Recipes</a>
 
     <script>
         const ingredientInput = document.getElementById('ingredient-input');

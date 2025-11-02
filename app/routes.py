@@ -89,7 +89,7 @@ def new_recipe():
             return render_template("recipe_form.html", recipe=None)
 
         save_user_recipe(name, ingredients, instructions, source="user", api_id=None)
-        return redirect(url_for("my_recipes"))
+        return redirect(url_for("main.my_recipes"))
 
     return render_template("recipe_form.html", recipe=None)
 
@@ -121,7 +121,7 @@ def edit_recipe(recipe_id):
             flash("Unable to update recipe.", "error")
             return render_template("recipe_form.html", recipe=recipe)
 
-        return redirect(url_for("my_recipes"))
+        return redirect(url_for("main.my_recipes"))
 
 
     recipe_steps = recipe.get("instructions", "").split("\n")
@@ -130,7 +130,7 @@ def edit_recipe(recipe_id):
 @bp.route('/my_recipes/<int:recipe_id>/delete', methods=['POST'])
 def delete_recipe(recipe_id):
     delete_user_recipe(recipe_id)
-    return redirect(url_for('my_recipes'))
+    return redirect(url_for('main.my_recipes'))
 
 # ---------- API Save (saving an API result into DB) ----------
 @bp.route('/save_recipe', methods=['POST'])
@@ -149,7 +149,7 @@ def save_recipe():
         return redirect(request.referrer or url_for("home"))
 
     save_user_recipe(name, ingredients, instructions, source="api", api_id=api_id)
-    return redirect(url_for("my_recipes"))
+    return redirect(url_for("main.my_recipes"))
 
 
 @bp.route("/ingredient_suggestions")

@@ -7,8 +7,6 @@ from .storage import get_cached_response, save_cached_response, get_common_ingre
 from dotenv import load_dotenv
 load_dotenv()
 
-ingredient_cache = {}
-
 
 def search_recipes(user_ingredients, limit=10):
     """
@@ -85,13 +83,11 @@ def get_ingredient_suggestions(query):
     if query == "":
         return get_common_ingredients_from_db()
 
-    if query in ingredient_cache:
-        return ingredient_cache[query]
+    if query in current_app.ingredient_cache:
+        return current_app.ingredient_cache[query]
 
     suggestions = get_common_ingredients_from_db()
     suggestions = [s for s in suggestions if s.startswith(query)]
-
-    suggestions = [normalize_ingredient(row[0]) for row in rows]
 
     if not suggestions:
         try:
@@ -101,7 +97,7 @@ def get_ingredient_suggestions(query):
             )
             if response.status_code == 200:
                 suggestions = [normalize_ingredient(item["name"]) for item in response.json()]
-                ingredient_cache[query] = suggestions
+                current_app.ingredient_cache[query] = suggestions
         except Exception as e:
             print(f"Error fetching ingredient suggestions from API: {e}")
             suggestions = []
