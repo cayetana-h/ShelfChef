@@ -1,19 +1,13 @@
 import requests
-import sqlite3
+import json
+from flask import current_app
 from .utils import build_recipe_dict, normalize_ingredient, clean_instructions
+from .storage import get_cached_response, save_cached_response, get_common_ingredients_from_db
 
-API_KEY = "3f522310e0834471886574d3cef664c5"   
-API_URL = "https://api.spoonacular.com/recipes/findByIngredients"
-RECIPE_DETAILS_URL = "https://api.spoonacular.com/recipes/{id}/information"
-INGREDIENT_AUTOCOMPLETE_URL = "https://api.spoonacular.com/food/ingredients/autocomplete"
+
 
 ingredient_cache = {}
 
-
-from app.utils import build_recipe_dict
-
-import json
-from .storage import get_cached_response, save_cached_response
 
 def search_recipes(user_ingredients, limit=10):
     """
@@ -30,8 +24,9 @@ def search_recipes(user_ingredients, limit=10):
         except Exception as e:
             print(f"Cache decode error: {e}, falling back to API...")
 
-    params = {"ingredients": ingredients_str, "number": limit * 2, "apiKey": API_KEY}  
-    response = requests.get(API_URL, params=params)
+    params = {"ingredients": ingredients_str, "number": limit * 2, "apiKey": current_app.config["API_KEY"]}  
+    
+    response = requests.get(current_app.config["API_URL"], params=params)
     if response.status_code != 200:
         print(f"API error: {response.status_code}")
         return []
@@ -41,7 +36,7 @@ def search_recipes(user_ingredients, limit=10):
 
     for recipe in recipes_data:
         recipe_id = recipe["id"]
-        details_response = requests.get(RECIPE_DETAILS_URL.format(id=recipe_id), params={"apiKey": API_KEY})
+        details_response = requests.get(current_app.config["RECIPE_DETAILS_URL"].format(id=recipe_id), params={"apiKey": current_app.config["API_KEY"]})
         details = details_response.json() if details_response.status_code == 200 else None
         recipes.append(build_recipe_dict(recipe, details))
 
@@ -57,7 +52,8 @@ def get_recipe_details(recipe_id):
     """
     fetching full details for a single recipe by ID 
     """
-    response = requests.get(RECIPE_DETAILS_URL.format(id=recipe_id), params={"apiKey": API_KEY})
+    response = requests.get(current_app.config["RECIPE_DETAILS_URL"].format(id=recipe_id), params={"apiKey": current_app.config["API_KEY"]})
+    
     if response.status_code == 200:
         details = response.json()
         image = details.get("image", "")
@@ -77,14 +73,6 @@ def get_recipe_details(recipe_id):
         print(f"Failed to fetch recipe {recipe_id}, status: {response.status_code}")
         return None
 
-def get_common_ingredients_from_db():
-    """fetiching common ingredients stored in the db"""
-    conn = sqlite3.connect("recipes.db")
-    c = conn.cursor()
-    c.execute("SELECT name FROM ingredients")  
-    rows = c.fetchall()
-    conn.close()
-    return [normalize_ingredient(row[0]) for row in rows]
 
 def get_ingredient_suggestions(query):
     """
@@ -99,19 +87,16 @@ def get_ingredient_suggestions(query):
     if query in ingredient_cache:
         return ingredient_cache[query]
 
-    conn = sqlite3.connect("recipes.db")
-    c = conn.cursor()
-    c.execute("SELECT name FROM ingredients WHERE name LIKE ?", (f"{query}%",))
-    rows = c.fetchall()
-    conn.close()
+    suggestions = get_common_ingredients_from_db()
+    suggestions = [s for s in suggestions if s.startswith(query)]
 
     suggestions = [normalize_ingredient(row[0]) for row in rows]
 
     if not suggestions:
         try:
             response = requests.get(
-                INGREDIENT_AUTOCOMPLETE_URL,
-                params={"query": query, "number": 10, "apiKey": API_KEY}
+                current_app.config["INGREDIENT_AUTOCOMPLETE_URL"],
+                params={"query": query, "number": 10, "apiKey": current_app.config["API_KEY"]}
             )
             if response.status_code == 200:
                 suggestions = [normalize_ingredient(item["name"]) for item in response.json()]

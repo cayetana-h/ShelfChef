@@ -1,6 +1,9 @@
 import sqlite3
 from typing import List, Optional, Dict, Any
 
+from .utils import normalize_ingredient
+
+
 DB_PATH = "recipes.db"
 
 def _get_connection():
@@ -124,6 +127,15 @@ def delete_user_recipe(recipe_id: int) -> bool:
     changed = c.rowcount > 0
     conn.close()
     return changed
+
+def get_common_ingredients_from_db():
+    """fetiching common ingredients stored in the db"""
+    conn = sqlite3.connect("recipes.db")
+    c = conn.cursor()
+    c.execute("SELECT name FROM ingredients")  
+    rows = c.fetchall()
+    conn.close()
+    return [normalize_ingredient(row[0]) for row in rows]
 
 # ------------------------
 # Cache helpers
