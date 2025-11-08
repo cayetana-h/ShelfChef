@@ -1,48 +1,31 @@
 import requests
 import json
 from flask import current_app
-from .utils import build_recipe_dict, normalize_ingredient, clean_instructions
-from .storage import get_cached_response, save_cached_response, get_common_ingredients_from_db
+from .utils import build_recipe_dict, normalize_ingredient, clean_instructions,prepare_ingredient_query, get_recipes_from_cache, build_api_params, fetch_recipes_from_api, save_recipes_to_cache, get_cached_response, save_cached_response
+from .storage import get_common_ingredients_from_db
 
 from dotenv import load_dotenv
 load_dotenv()
 
 
-def search_recipes(user_ingredients, limit=10):
+def search_recipes(user_ingredients, limit=10, config=None):
     """
     searching recipes based on user-provided ingredients
     first checking local cache, then falling back to API if needed
     """
-    normalized_ingredients = [normalize_ingredient(i) for i in user_ingredients if i.strip()]
-    ingredients_str = ",".join(normalized_ingredients)
+    config = config or current_app.config
+    ingredients_str = prepare_ingredient_query(user_ingredients)
 
-    cached = get_cached_response(ingredients_str)
-    if cached:
-        try:
-            return json.loads(cached)
-        except Exception as e:
-            print(f"Cache decode error: {e}, falling back to API...")
+    recipes = get_recipes_from_cache(ingredients_str)
+    if recipes:
+        return recipes
 
-    params = {"ingredients": ingredients_str, "number": limit * 2, "apiKey": current_app.config["API_KEY"]}  
+    recipes = fetch_recipes_from_api(ingredients_str, limit, config)
     
-    response = requests.get(current_app.config["API_URL"], params=params)
-    if response.status_code != 200:
-        print(f"API error: {response.status_code}")
-        return []
-
-    recipes_data = response.json()
-    recipes = []
-
-    for recipe in recipes_data:
-        recipe_id = recipe["id"]
-        details_response = requests.get(current_app.config["RECIPE_DETAILS_URL"].format(id=recipe_id), params={"apiKey": current_app.config["API_KEY"]})
-        details = details_response.json() if details_response.status_code == 200 else None
-        recipes.append(build_recipe_dict(recipe, details))
-
     recipes.sort(key=lambda r: r["missing_ingredients"])
     final_recipes = recipes[:limit]
 
-    save_cached_response(ingredients_str, json.dumps(final_recipes))
+    save_recipes_to_cache(ingredients_str, final_recipes)
 
     return final_recipes
 

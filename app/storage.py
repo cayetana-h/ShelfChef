@@ -3,20 +3,7 @@ from typing import List, Optional, Dict, Any
 from contextlib import contextmanager
 from flask import current_app
 from .utils import normalize_ingredient
-
-
-def _get_connection():
-    conn = sqlite3.connect(current_app.config.get("DATABASE_PATH", "recipes.db"))
-    conn.row_factory = sqlite3.Row
-    return conn
-
-@contextmanager
-def db_connection():
-    conn = _get_connection()
-    try:
-        yield conn
-    finally:
-        conn.close()
+from .db_utils import db_connection
 
 
 def _ensure_db():
@@ -136,27 +123,6 @@ def get_common_ingredients_from_db():
         c.execute("SELECT name FROM ingredients")  
         rows = c.fetchall()
     return [normalize_ingredient(row[0]) for row in rows]
-
-# ------------------------
-# Cache helpers
-# ------------------------
-def get_cached_response(query: str) -> Optional[str]:
-    """returns cached JSON string for a query if it exists"""
-    with db_connection() as conn:
-        c = conn.cursor()
-        c.execute("SELECT response FROM cached_responses WHERE query = ?", (query,))
-        row = c.fetchone()
-    return row["response"] if row else None
-
-def save_cached_response(query: str, response: str) -> None:
-    """saves or updates cache for a query"""
-    with db_connection() as conn:
-        c = conn.cursor()
-        c.execute("""
-            INSERT INTO cached_responses (query, response) VALUES (?, ?)
-            ON CONFLICT(query) DO UPDATE SET response=excluded.response
-        """, (query, response))
-        conn.commit()
 
 def init_db(app=None):
     if app:

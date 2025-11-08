@@ -1,4 +1,25 @@
+# ---------- CACHE HELPERS  ----------
+import json
+from .db_utils import db_connection
+from typing import List, Optional, Dict, Any
 
+def get_cached_response(query: str) -> Optional[str]:
+    """returns cached JSON string for a query if it exists"""
+    with db_connection() as conn:
+        c = conn.cursor()
+        c.execute("SELECT response FROM cached_responses WHERE query = ?", (query,))
+        row = c.fetchone()
+    return row["response"] if row else None
+
+def save_cached_response(query: str, response: str) -> None:
+    """saves or updates cache for a query"""
+    with db_connection() as conn:
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO cached_responses (query, response) VALUES (?, ?)
+            ON CONFLICT(query) DO UPDATE SET response=excluded.response
+        """, (query, response))
+        conn.commit()
 
     # ---------- FOR ROUTES.PY  ----------
 
@@ -147,6 +168,40 @@ def clean_instructions(raw_instructions: str):
 
     return steps
 
+def prepare_ingredient_query(user_ingredients):
+    normalized = [normalize_ingredient(i) for i in user_ingredients if i.strip()]
+    return ",".join(normalized)
+
+import json
+def get_recipes_from_cache(ingredients_str):
+    cached = get_cached_response(ingredients_str)
+    if not cached:
+        return None
+    try:
+        return json.loads(cached)
+    except Exception:
+        return None
+
+def build_api_params(ingredients_str, limit, config):
+    return {"ingredients": ingredients_str, "number": limit*2, "apiKey": config["API_KEY"]}
+
+import requests
+def fetch_recipes_from_api(ingredients_str, limit, config, requester=requests):
+    response = requester.get(config["API_URL"], params={"ingredients": ingredients_str, "number": limit*2, "apiKey": config["API_KEY"]})
+    if response.status_code != 200:
+        return []
+
+    recipes_data = response.json()
+    recipes = []
+    for recipe in recipes_data:
+        recipe_id = recipe["id"]
+        details_resp = requester.get(config["RECIPE_DETAILS_URL"].format(id=recipe_id), params={"apiKey": config["API_KEY"]})
+        details = details_resp.json() if details_resp.status_code == 200 else None
+        recipes.append(build_recipe_dict(recipe, details))
+    return recipes
+
+def save_recipes_to_cache(ingredients_str, recipes):
+    save_cached_response(ingredients_str, json.dumps(recipes))
 
     # ----------__INIT__.PY----------
 
