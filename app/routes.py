@@ -7,7 +7,7 @@ from .api_client import search_recipes, get_recipe_details, get_ingredient_sugge
 from .utils import (
     normalize_ingredients, build_cache_key, matching_missing_for_recipe, 
     sort_recipes, validate_name, validate_ingredients, validate_instructions, 
-    format_instructions, validate_recipe_form
+    format_instructions, validate_recipe_form, get_processed_recipes
     )
 
 bp = Blueprint("main", __name__)
@@ -27,16 +27,7 @@ def results():
 
     if raw_input:
         user_ingredients = normalize_ingredients(raw_input)
-        key = build_cache_key(user_ingredients)
-
-        if key in current_app.recipe_cache:
-            recipes = current_app.recipe_cache[key]
-        else:
-            api_results = search_recipes(user_ingredients)
-            recipes = matching_missing_for_recipe(user_ingredients, api_results)
-            current_app.recipe_cache[key] = recipes
-
-        recipes = sort_recipes(recipes, sort_by)
+        recipes = get_processed_recipes(user_ingredients, sort_by, current_app.recipe_cache)
     else:
         recipes = []
 

@@ -77,6 +77,23 @@ def validate_recipe_form(name: str, raw_ingredients: str, steps: list):
 
     return True, "", ingredients, instructions
 
+def get_processed_recipes(user_ingredients, sort_by, cache):
+    """
+    retrieving, processing, and sorting recipes based on user ingredients and sort preference
+    """
+    # I decided to import here to avoid circular imports and not create an additional file for a singlular function
+    from .api_client import search_recipes 
+
+    key = build_cache_key(user_ingredients)
+    if key in cache:
+        return cache[key]
+
+    api_results = search_recipes(user_ingredients)
+    recipes = matching_missing_for_recipe(user_ingredients, api_results)
+    cache[key] = recipes
+
+    return sort_recipes(recipes, sort_by)
+
 
 
     # ---------- MAINLY FOR MY RECIPES CRUD IN REOUTES.PY----------
