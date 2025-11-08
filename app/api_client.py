@@ -1,7 +1,10 @@
 import requests
 import json
 from flask import current_app
-from .utils import build_recipe_dict, normalize_ingredient, clean_instructions,prepare_ingredient_query, get_recipes_from_cache, build_api_params, fetch_recipes_from_api, save_recipes_to_cache, get_cached_response, save_cached_response
+from .utils import( 
+    build_recipe_dict, normalize_ingredient, clean_instructions,prepare_ingredient_query, 
+    get_recipes_from_cache, build_api_params, fetch_recipes_from_api, save_recipes_to_cache, 
+    get_cached_response, save_cached_response, fetch_recipe_details)
 from .storage import get_common_ingredients_from_db
 
 from dotenv import load_dotenv
@@ -30,30 +33,30 @@ def search_recipes(user_ingredients, limit=10, config=None):
     return final_recipes
 
 
-def get_recipe_details(recipe_id):
+def get_recipe_details(recipe_id, config=None, requester=requests):
     """
     fetching full details for a single recipe by ID 
     """
-    response = requests.get(current_app.config["RECIPE_DETAILS_URL"].format(id=recipe_id), params={"apiKey": current_app.config["API_KEY"]})
-    
-    if response.status_code == 200:
-        details = response.json()
-        image = details.get("image", "")
-        if image:
-            image = image.strip()
-        if not image:
-            image = None
-        return {
-            "id": recipe_id,
-            "name": details.get("title", "No name"),
-            "ingredients": [normalize_ingredient(ing["name"]) for ing in details.get("extendedIngredients", [])],
-            "instructions": clean_instructions(details.get("instructions", "")),  
-            "image": details.get("image") if details and details.get("image") else None,
-            "sourceUrl": details.get("sourceUrl", "")
-        }
-    else:
-        print(f"Failed to fetch recipe {recipe_id}, status: {response.status_code}")
+    config = config or current_app.config
+    details = fetch_recipe_details(recipe_id, config, requester)
+
+    if not details:
+        print(f"Failed to fetch recipe {recipe_id}")
         return None
+    
+    image = details.get("image")
+    if image:
+        image = image.strip()
+    if not image:
+        image = None
+    return {
+        "id": recipe_id,
+        "name": details.get("title", "No name"),
+        "ingredients": [normalize_ingredient(ing["name"]) for ing in details.get("extendedIngredients", [])],
+        "instructions": clean_instructions(details.get("instructions", "")),  
+        "image": image,
+        "sourceUrl": details.get("sourceUrl", "")
+    }
 
 
 def get_ingredient_suggestions(query):

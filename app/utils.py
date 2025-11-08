@@ -107,7 +107,7 @@ def format_instructions(steps: list):
     return "\n".join(f"{i+1}. {step.strip()}" for i, step in enumerate(steps) if step.strip())
 
 
-    # ---------- API_CLIENT.PY----------
+    # ---------- FOR API_CLIENT.PY----------
 
 import inflect
 import re
@@ -169,11 +169,13 @@ def clean_instructions(raw_instructions: str):
     return steps
 
 def prepare_ingredient_query(user_ingredients):
+    """ preparing a normalized, comma-separated ingredient string for API queries"""
     normalized = [normalize_ingredient(i) for i in user_ingredients if i.strip()]
     return ",".join(normalized)
 
 import json
 def get_recipes_from_cache(ingredients_str):
+    """ retrieving cached recipes for a given ingredient query"""
     cached = get_cached_response(ingredients_str)
     if not cached:
         return None
@@ -183,10 +185,12 @@ def get_recipes_from_cache(ingredients_str):
         return None
 
 def build_api_params(ingredients_str, limit, config):
+    """ building parameters for API request"""
     return {"ingredients": ingredients_str, "number": limit*2, "apiKey": config["API_KEY"]}
 
 import requests
 def fetch_recipes_from_api(ingredients_str, limit, config, requester=requests):
+    """ fetching recipes from external API"""
     response = requester.get(config["API_URL"], params={"ingredients": ingredients_str, "number": limit*2, "apiKey": config["API_KEY"]})
     if response.status_code != 200:
         return []
@@ -201,7 +205,42 @@ def fetch_recipes_from_api(ingredients_str, limit, config, requester=requests):
     return recipes
 
 def save_recipes_to_cache(ingredients_str, recipes):
+    """ saving fetched recipes to cache"""
     save_cached_response(ingredients_str, json.dumps(recipes))
+
+def fetch_recipe_details(recipe_id, config, requester=requests):
+    """
+    fetching full details for a single recipe by ID
+    """
+    response = requester.get(
+        config["RECIPE_DETAILS_URL"].format(id=recipe_id),
+        params={"apiKey": config["API_KEY"]}
+    )
+    if response.status_code != 200:
+        return None
+    return response.json()
+
+def build_recipe_details(recipe_id, details):
+    """ building recipe details dict from API response"""
+    if not details:
+        return None
+
+    image = details.get("image")
+    if image:
+        image = image.strip()
+    else:
+        image = None
+
+    return {
+        "id": recipe_id,
+        "name": details.get("title", "No name"),
+        "ingredients": [normalize_ingredient(ing["name"]) for ing in details.get("extendedIngredients", [])],
+        "instructions": clean_instructions(details.get("instructions", "")),
+        "image": image,
+        "sourceUrl": details.get("sourceUrl", "")
+    }
+
+
 
     # ----------__INIT__.PY----------
 
