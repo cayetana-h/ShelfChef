@@ -240,6 +240,28 @@ def build_recipe_details(recipe_id, details):
         "sourceUrl": details.get("sourceUrl", "")
     }
 
+def fetch_ingredient_suggestions_from_api(query, config, requester=requests):
+    """
+    fetching ingredient suggestions based on user input from external API
+    """
+    try:
+        response = requester.get(
+            config["INGREDIENT_AUTOCOMPLETE_URL"],
+            params={"query": query, "number": 10, "apiKey": config["API_KEY"]}
+        )
+        if response.status_code == 200:
+            return [normalize_ingredient(item["name"]) for item in response.json()]
+    except Exception as e:
+        print(f"Error fetching ingredient suggestions from API: {e}")
+    return []
+
+def get_ingredient_suggestions_from_cache(query, ingredient_cache):
+    """ retrieving ingredient suggestions from in-memory cache"""
+    return ingredient_cache.get(query)
+
+def save_ingredient_suggestions_to_cache(query, suggestions, ingredient_cache):
+    """ saving ingredient suggestions to in-memory cache"""
+    ingredient_cache[query] = suggestions
 
 
     # ----------__INIT__.PY----------

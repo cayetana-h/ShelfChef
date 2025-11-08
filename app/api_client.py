@@ -4,7 +4,8 @@ from flask import current_app
 from .utils import( 
     build_recipe_dict, normalize_ingredient, clean_instructions,prepare_ingredient_query, 
     get_recipes_from_cache, build_api_params, fetch_recipes_from_api, save_recipes_to_cache, 
-    get_cached_response, save_cached_response, fetch_recipe_details)
+    get_cached_response, save_cached_response, fetch_recipe_details, fetch_ingredient_suggestions_from_api,
+    get_ingredient_suggestions_from_cache)
 from .storage import get_common_ingredients_from_db
 
 from dotenv import load_dotenv
@@ -59,11 +60,12 @@ def get_recipe_details(recipe_id, config=None, requester=requests):
     }
 
 
-def get_ingredient_suggestions(query):
+def get_ingredient_suggestions(query, config=None):
     """
     fetching ingredient suggestions based on user input
     using local db cache first, then falling back to API if needed
     """
+    config = config or current_app.config
     query = normalize_ingredient(query)
 
     if query == "":
@@ -72,20 +74,14 @@ def get_ingredient_suggestions(query):
     if query in current_app.ingredient_cache:
         return current_app.ingredient_cache[query]
 
-    suggestions = get_common_ingredients_from_db()
-    suggestions = [s for s in suggestions if s.startswith(query)]
+    cached = get_ingredient_suggestions_from_cache(query, current_app.ingredient_cache)
+    if cached:
+        return cached
+    
+    suggestions = [s for s in get_common_ingredients_from_db() if s.startswith(query)]
 
     if not suggestions:
-        try:
-            response = requests.get(
-                current_app.config["INGREDIENT_AUTOCOMPLETE_URL"],
-                params={"query": query, "number": 10, "apiKey": current_app.config["API_KEY"]}
-            )
-            if response.status_code == 200:
-                suggestions = [normalize_ingredient(item["name"]) for item in response.json()]
-                current_app.ingredient_cache[query] = suggestions
-        except Exception as e:
-            print(f"Error fetching ingredient suggestions from API: {e}")
-            suggestions = []
+        suggestions = fetch_ingredient_suggestions_from_api(query, config)
+        save_cached_response(f"ingredient_suggestions:{query}", json.dumps(suggestions))
 
     return suggestions
