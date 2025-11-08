@@ -1,22 +1,17 @@
 from flask import Flask
-import os 
+from .storage import init_db
+from .utils import init_cache 
 
 def create_app():
     app = Flask(__name__)  
 
     app.config.from_object("app.config.Config")
 
-    if not hasattr(app, "recipe_cache"):
-        app.recipe_cache = {}
-
-    if not hasattr(app, "ingredient_cache"):
-        app.ingredient_cache = {}
+    init_cache(app)
+    init_db(app)
 
     from .routes import bp as routes_bp
     app.register_blueprint(routes_bp)
 
-    with app.app_context():
-        from .storage import _ensure_db
-        _ensure_db()
 
     return app

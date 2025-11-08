@@ -146,3 +146,17 @@ def clean_instructions(raw_instructions: str):
     steps = [re.sub(r'[^\w\s,.()/-]', '', step).strip() for step in steps if step.strip()]
 
     return steps
+
+
+    # ----------__INIT__.PY----------
+
+def init_cache(app):
+    """ initializing in-memory caches for recipes and ingredients """
+    caches = {
+        "recipe_cache": {},
+        "ingredient_cache": {}
+    }
+
+    for name, cache in caches.items():
+        if not hasattr(app, name):
+            setattr(app, name, cache)

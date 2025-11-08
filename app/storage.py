@@ -157,4 +157,11 @@ def save_cached_response(query: str, response: str) -> None:
             ON CONFLICT(query) DO UPDATE SET response=excluded.response
         """, (query, response))
         conn.commit()
+
+def init_db(app=None):
+    if app:
+        with app.app_context():
+            _ensure_db()
+    else:
+        _ensure_db()
         
