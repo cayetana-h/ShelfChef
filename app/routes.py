@@ -7,7 +7,8 @@ from .api_client import search_recipes, get_recipe_details, get_ingredient_sugge
 from .utils import (
     normalize_ingredients, build_cache_key, matching_missing_for_recipe, 
     sort_recipes, validate_name, validate_ingredients, validate_instructions, 
-    format_instructions, validate_recipe_form, get_processed_recipes
+    format_instructions, validate_recipe_form, get_processed_recipes, 
+    fetch_recipe_or_404, process_new_recipe_form, extract_api_recipe_form
     )
 
 bp = Blueprint("main", __name__)
@@ -43,8 +44,9 @@ def recipe_detail(recipe_id):
     """
     fetches and displays recipe steps about a specific recipe
     """
-    recipe = get_recipe_details(recipe_id)
-    if not recipe:
+    try:
+        recipe = fetch_recipe_or_404(recipe_id)
+    except ValueError:
         return "Recipe not found", 404
 
     ingredients = request.args.get("ingredients", "")
@@ -67,19 +69,17 @@ def my_recipes():
 @bp.route('/my_recipes/new', methods=['GET', 'POST'])
 def new_recipe():
     """
-    handles both displaying the form and processing form submissions for new recipes
+    displaying the new recipe form and saving a new user recipe (validation)
     """
     if request.method == "POST":
-        name = request.form.get("name", "").title().strip()
-        raw_ingredients = request.form.get("ingredients", "")
-        steps = request.form.getlist("instructions[]")
-
-        valid, msg, ingredients, instructions = validate_recipe_form(name, raw_ingredients, steps)
+        valid, msg, ingredients, instructions = process_new_recipe_form(request.form)
         if not valid:
             flash(msg, "error")
             return render_template("recipe_form.html", recipe=None)
 
-        save_user_recipe(name, ingredients, instructions, source="user", api_id=None)
+        save_user_recipe(request.form.get("name", "").title().strip(), ingredients, instructions, source="user", api_id=None)
+
+        flash("Recipe added successfully!", "success")
         return redirect(url_for("main.my_recipes"))
 
     return render_template("recipe_form.html", recipe=None)
@@ -98,11 +98,10 @@ def edit_recipe(recipe_id):
         return "Editing is not allowed for recipes saved from the API.", 403
 
     if request.method == "POST":
-        name = request.form.get("name", "").title().strip()
-        raw_ingredients = request.form.get("ingredients", "")
-        steps = request.form.getlist("instructions[]")
+        valid, msg, ingredients, instructions = process_new_recipe_form(request.form)
 
-        valid, msg, ingredients, instructions = validate_recipe_form(name, raw_ingredients, steps)
+        name = request.form.get("name", "").title().strip()
+
         if not valid:
             flash(msg, "error")
             return render_template("recipe_form.html", recipe=recipe)
@@ -113,10 +112,7 @@ def edit_recipe(recipe_id):
             return render_template("recipe_form.html", recipe=recipe)
 
         return redirect(url_for("main.my_recipes"))
-
-
-    recipe_steps = recipe.get("instructions", "").split("\n")
-    return render_template("recipe_form.html", recipe=recipe, recipe_steps=recipe_steps)
+    return render_template("recipe_form.html", recipe=recipe)
 
 @bp.route('/my_recipes/<int:recipe_id>/delete', methods=['POST'])
 def delete_recipe(recipe_id):
@@ -127,14 +123,8 @@ def delete_recipe(recipe_id):
 @bp.route('/save_recipe', methods=['POST'])
 def save_recipe():
     """saving a recipe coming from the API to my recipes"""
-    name = request.form.get("name", "").title().strip()
-    raw_ingredients = request.form.get("ingredients", "")
-    steps = request.form.get("instructions", "").split("\n")
-    api_id_raw = request.form.get("api_id")
-    api_id = int(api_id_raw) if api_id_raw and api_id_raw.isdigit() else None
+    valid, msg, name, ingredients, instructions, api_id = extract_api_recipe_form(request.form)
 
-
-    valid, msg, ingredients, instructions = validate_recipe_form(name, raw_ingredients, steps)
     if not valid:
         flash(msg, "error")
         return redirect(request.referrer or url_for("home"))

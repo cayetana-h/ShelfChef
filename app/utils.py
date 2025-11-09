@@ -78,12 +78,12 @@ def validate_recipe_form(name: str, raw_ingredients: str, steps: list):
     return True, "", ingredients, instructions
 
 def get_processed_recipes(user_ingredients, sort_by, cache):
-    """
-    retrieving, processing, and sorting recipes based on user ingredients and sort preference
-    """
     # I decided to import here to avoid circular imports and not create an additional file for a singlular function
     from .api_client import search_recipes 
 
+    """
+    retrieving, processing, and sorting recipes based on user ingredients and sort preference
+    """
     key = build_cache_key(user_ingredients)
     if key in cache:
         return cache[key]
@@ -94,6 +94,25 @@ def get_processed_recipes(user_ingredients, sort_by, cache):
 
     return sort_recipes(recipes, sort_by)
 
+def fetch_recipe_or_404(recipe_id):
+    from .api_client import get_recipe_details
+   
+    """ fetching recipe details or raising 404 error if not found"""
+    recipe = get_recipe_details(recipe_id)
+    if not recipe:
+        raise ValueError(f"Recipe {recipe_id} not found")
+    return recipe
+
+def extract_api_recipe_form(form):
+    """process API recipe form data"""
+    name = form.get("name", "").title().strip()
+    raw_ingredients = form.get("ingredients", "")
+    steps = form.get("instructions", "").split("\n")
+    api_id_raw = form.get("api_id")
+    api_id = int(api_id_raw) if api_id_raw and api_id_raw.isdigit() else None
+
+    valid, msg, ingredients, instructions = validate_recipe_form(name, raw_ingredients, steps)
+    return valid, msg, name, ingredients, instructions, api_id
 
 
     # ---------- MAINLY FOR MY RECIPES CRUD IN REOUTES.PY----------
@@ -110,7 +129,7 @@ def validate_ingredients(ingredients: list):
     """checking there is at least one ingredient """
     ingredients = list(dict.fromkeys(ingredients)) 
     if not ingredients:
-        return False, "Please provide at least one ingredient.", []
+        return False, "Please provide at least one ingredient."
     return True, ""
 
 def validate_instructions(instructions: str):
@@ -122,6 +141,15 @@ def validate_instructions(instructions: str):
 def format_instructions(steps: list):
     """ transforming a list of steps into a numbered string and removing empty steps"""
     return "\n".join(f"{i+1}. {step.strip()}" for i, step in enumerate(steps) if step.strip())
+
+def process_new_recipe_form(form_data):
+    """ processing and validating new recipe form data"""
+    name = form_data.get("name", "").title().strip()
+    raw_ingredients = form_data.get("ingredients", "")
+    steps = form_data.getlist("instructions[]")
+
+    valid, msg, ingredients, instructions = validate_recipe_form(name, raw_ingredients, steps)
+    return valid, msg, ingredients, instructions
 
 
     # ---------- FOR API_CLIENT.PY----------
