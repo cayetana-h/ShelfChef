@@ -9,7 +9,6 @@ def client():
 
 
 # ------- tests for /results route -----
-@pytest.mark.integration
 @patch("app.routes.get_processed_recipes")
 def test_results_endpoint(mock_process, client):
     """testing /results endpoint returns recipe results in HTML"""
@@ -32,7 +31,6 @@ def test_results_endpoint(mock_process, client):
 
 
 # ------- tests /recipe/<id> route -------
-@pytest.mark.integration
 @patch("app.routes.fetch_recipe_or_404")
 def test_recipe_details_endpoint(mock_fetch, client):
     """testing /recipe/<id> endpoint returns recipe details in HTML"""
@@ -45,13 +43,11 @@ def test_recipe_details_endpoint(mock_fetch, client):
     }
     response = client.get("/recipe/42")
     assert response.status_code == 200
-    # HTML route → look for text in response body
     assert b"Salad" in response.data
     assert b"Mix it" in response.data
 
 
 # ------ tests /ingredients endpoint ------
-@pytest.mark.integration
 @patch("app.routes.get_ingredient_suggestions")
 def test_ingredient_suggestions_endpoint(mock_suggest, client):
     """testing /ingredient_suggestions endpoint returns JSON suggestions"""

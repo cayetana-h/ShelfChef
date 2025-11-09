@@ -35,12 +35,11 @@ def test_search_recipes_success(mock_save, mock_api, mock_cache):
     """ testing search_recipes retrieves from cache when available """
     mock_cache.return_value = [{"id": 1, "missing_ingredients": 0}]
     mock_config = {"SPOONACULAR_API_KEY": "test_key"}
-    
     recipes = api_client.search_recipes(["cheese", "tomato"], config=mock_config)
+    
     assert len(recipes) == 1
     mock_api.assert_not_called()
     mock_save.assert_not_called()
-    
 
 @patch("app.api_client.get_recipes_from_cache")
 @patch("app.api_client.fetch_recipes_from_api")
@@ -77,7 +76,6 @@ def test_get_recipe_details_success(mock_fetch):
     assert "lettuce" in result["ingredients"]
     assert result["image"] == "salad.png"  
 
-
 @patch("app.api_client.fetch_recipe_details")
 def test_get_recipe_details_failure(mock_fetch):
     """testing get_recipe_details handles API failure gracefully"""
@@ -106,7 +104,6 @@ def test_get_ingredient_suggestions_api_fallback(mock_cache, mock_api, mock_db, 
         assert "cucumber" in suggestions
         assert "carrot" in suggestions
         mock_api.assert_called_once()
-
 
 @patch("app.api_client.get_common_ingredients_from_db")
 def test_get_ingredient_suggestions_empty_query(mock_db):
