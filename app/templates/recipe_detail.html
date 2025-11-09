@@ -102,7 +102,7 @@
     <h2>Instructions:</h2>
     <p>{{ recipe.instructions | safe }}</p>
 
-    <form action="{{ url_for('save_recipe') }}" method="post">
+    <form action="{{ url_for('main.save_recipe') }}" method="post">
         <input type="hidden" name="name" value="{{ recipe.name }}">
         <input type="hidden" name="ingredients" value="{{ recipe.ingredients | join(',') }}">
         <input type="hidden" name="instructions" value="{{ recipe.instructions | join(' || ') }}">
@@ -110,7 +110,7 @@
     </form>
 
     <div style="text-align: center; margin-top: 20px;">
-        <a href="{{ url_for('results', ingredients=ingredients, sort_by=sort_by) }}">
+        <a href="{{ url_for('main.results', ingredients=ingredients, sort_by=sort_by) }}">
             <button type="button">Back to Results</button>
         </a>       
     </div>

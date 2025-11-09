@@ -128,7 +128,7 @@
     <h1>Search Results for: {{ ingredients }}</h1>
 
     <!-- sorting Options -->
-    <form method="get" action="{{ url_for('results') }}">
+    <form method="get" action="{{ url_for('main.results') }}">
         <input type="hidden" name="ingredients" value="{{ ingredients }}">
         <label for="sort_by">Sort by:</label>
         <select name="sort_by" id="sort_by">
@@ -160,7 +160,7 @@
                 <p>Matching Ingredients: {{ recipe.matches | join(', ') }}</p>
                 <p>Missing Ingredients: {{ recipe.missing_count }}</p>
 
-                <form action="{{ url_for('recipe_detail', recipe_id=recipe.id) }}" method="get">
+                <form action="{{ url_for('main.recipe_detail', recipe_id=recipe.id) }}" method="get">
                     <input type="hidden" name="ingredients" value="{{ ingredients }}">
                     <input type="hidden" name="sort_by" value="{{ sort_by }}">
                     <button type="submit">See Full Recipe</button>
@@ -173,7 +173,7 @@
     {% endif %}
 
     <div class="bottom-links">
-        <a href="/">Back to search</a> | <a href="{{ url_for('my_recipes') }}">My Recipes</a>
+        <a href="/">Back to search</a> | <a href="{{ url_for('main.my_recipes') }}">My Recipes</a>
     </div>
 </body>
 </html>

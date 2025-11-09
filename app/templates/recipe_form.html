@@ -106,7 +106,21 @@
 
         /* Instruction steps */
         .instruction-step {
+            display: flex;
+            align-items: center;
+            gap: 8px; /* space between input and remove button */
             margin-bottom: 10px;
+        }
+
+        .instruction-step input {
+            flex: 1; /* input takes available space */
+        }
+
+        .remove-step {
+            cursor: pointer;
+            color: red;
+            font-weight: bold;
+            user-select: none;
         }
 
         #add-step {
@@ -138,6 +152,7 @@
         <input type="text" id="name" name="name" value="{{ recipe.name if recipe else '' }}" required>
 
         <label>Ingredients:</label>
+        <div id="ingredient-error" style="color:red; font-size:0.9em; margin-bottom:10px;"></div>
         <div id="ingredient-tags">
             {% if recipe %}
                 {% for ing in recipe.ingredients %}
@@ -146,7 +161,7 @@
             {% endif %}
             <input type="text" id="ingredient-input" placeholder="Type ingredient and press Enter">
         </div>
-        <input type="hidden" name="ingredients" id="ingredients-hidden">
+        <input type="hidden" name="ingredients" id="ingredients-hidden" required>
 
         <label>Instructions:</label>
         <div id="instructions-container">
@@ -166,26 +181,30 @@
         <button type="submit">{% if recipe %}Update{% else %}Save{% endif %}</button>
     </form>
 
-    <a class="back-link" href="{{ url_for('my_recipes') }}">⬅ Back to My Recipes</a>
+    <a class="back-link" href="{{ url_for('main.my_recipes') }}">⬅ Back to My Recipes</a>
 
     <script>
         const ingredientInput = document.getElementById('ingredient-input');
         const tagsContainer = document.getElementById('ingredient-tags');
         const hiddenIngredients = document.getElementById('ingredients-hidden');
-
+        const instructionsContainer = document.getElementById('instructions-container');
+        const addStepBtn = document.getElementById('add-step');
+        const errorDiv = document.getElementById('ingredient-error');
+        
         function updateHiddenIngredients() {
             const tags = Array.from(tagsContainer.querySelectorAll('.tag')).map(tag => tag.firstChild.textContent);
             hiddenIngredients.value = tags.join(',');
         }
-
-        tagsContainer.addEventListener('click', function(e) {
+        
+        // Ingredient tag events
+        tagsContainer.addEventListener('click', e => {
             if (e.target.classList.contains('remove-tag')) {
                 e.target.parentElement.remove();
                 updateHiddenIngredients();
             }
         });
-
-        ingredientInput.addEventListener('keydown', function(e) {
+        
+        ingredientInput.addEventListener('keydown', e => {
             if (e.key === 'Enter' && ingredientInput.value.trim() !== '') {
                 e.preventDefault();
                 const tag = document.createElement('span');
@@ -196,15 +215,57 @@
                 updateHiddenIngredients();
             }
         });
-
-        document.getElementById('add-step').addEventListener('click', function() {
+        
+        // Step helper
+        function createStep(value = "") {
             const div = document.createElement('div');
             div.className = 'instruction-step';
-            div.innerHTML = '<input type="text" name="instructions[]" placeholder="Step" required>';
-            document.getElementById('instructions-container').appendChild(div);
+            div.innerHTML = `<input type="text" name="instructions[]" value="${value}" placeholder="Step" required>`;
+        
+            const removeBtn = document.createElement('span');
+            removeBtn.className = 'remove-step';
+            removeBtn.textContent = 'x';
+            removeBtn.style.cursor = 'pointer';
+            removeBtn.style.color = 'red';
+            removeBtn.style.marginLeft = '8px';
+            div.appendChild(removeBtn);
+        
+            removeBtn.addEventListener('click', function() {
+                if (instructionsContainer.querySelectorAll('.instruction-step').length > 2) {
+                    div.remove();
+                } else {
+                    alert('A recipe must have at least 2 steps.');
+                }
+            });
+        
+            instructionsContainer.appendChild(div);
+        }
+        
+        // Initialize existing steps
+        document.querySelectorAll('#instructions-container .instruction-step input').forEach(input => {
+            const parentDiv = input.parentElement;
+            if (!parentDiv.querySelector('.remove-step')) {
+                createStep(input.value); // replaces old input with a new div including remove button
+                parentDiv.remove();       // remove original div
+            }
         });
-
+        
+        // Add new step
+        addStepBtn.addEventListener('click', () => createStep());
+        
+        // Form submit validation
+        document.getElementById('recipeForm').addEventListener('submit', e => {
+            updateHiddenIngredients();
+            document.getElementById('ingredient-check').value = hiddenIngredients.value;
+            
+            if (hiddenIngredients.value.trim() === "") {
+                e.preventDefault();
+                errorDiv.textContent = "Please add at least one ingredient!";
+            }
+        });
+        
         updateHiddenIngredients();
-    </script>
+        </script>
+        
 </body>
 </html>

@@ -1,4 +1,25 @@
+# ---------- CACHE HELPERS  ----------
+import json
+from .db_utils import db_connection
+from typing import List, Optional, Dict, Any
 
+def get_cached_response(query: str) -> Optional[str]:
+    """returns cached JSON string for a query if it exists"""
+    with db_connection() as conn:
+        c = conn.cursor()
+        c.execute("SELECT response FROM cached_responses WHERE query = ?", (query,))
+        row = c.fetchone()
+    return row["response"] if row else None
+
+def save_cached_response(query: str, response: str) -> None:
+    """saves or updates cache for a query"""
+    with db_connection() as conn:
+        c = conn.cursor()
+        c.execute("""
+            INSERT INTO cached_responses (query, response) VALUES (?, ?)
+            ON CONFLICT(query) DO UPDATE SET response=excluded.response
+        """, (query, response))
+        conn.commit()
 
     # ---------- FOR ROUTES.PY  ----------
 
@@ -56,6 +77,41 @@ def validate_recipe_form(name: str, raw_ingredients: str, steps: list):
 
     return True, "", ingredients, instructions
 
+def get_processed_recipes(user_ingredients, sort_by, cache):
+    # I decided to import here to avoid circular imports and not create an additional file for a singlular function
+    from .api_client import search_recipes 
+
+    """
+    retrieving, processing, and sorting recipes based on user ingredients and sort preference
+    """
+    key = build_cache_key(user_ingredients)
+    if key in cache:
+        recipes = cache[key]
+    else:
+        api_results = search_recipes(user_ingredients)
+        recipes = matching_missing_for_recipe(user_ingredients, api_results)
+        cache[key] = recipes
+    return sort_recipes(recipes.copy(), sort_by)
+
+def fetch_recipe_or_404(recipe_id):
+    from .api_client import get_recipe_details
+   
+    """ fetching recipe details or raising 404 error if not found"""
+    recipe = get_recipe_details(recipe_id)
+    if not recipe:
+        raise ValueError(f"Recipe {recipe_id} not found")
+    return recipe
+
+def extract_api_recipe_form(form):
+    """process API recipe form data"""
+    name = form.get("name", "").title().strip()
+    raw_ingredients = form.get("ingredients", "")
+    steps = form.get("instructions", "").split("\n")
+    api_id_raw = form.get("api_id")
+    api_id = int(api_id_raw) if api_id_raw and api_id_raw.isdigit() else None
+
+    valid, msg, ingredients, instructions = validate_recipe_form(name, raw_ingredients, steps)
+    return valid, msg, name, ingredients, instructions, api_id
 
 
     # ---------- MAINLY FOR MY RECIPES CRUD IN REOUTES.PY----------
@@ -72,7 +128,7 @@ def validate_ingredients(ingredients: list):
     """checking there is at least one ingredient """
     ingredients = list(dict.fromkeys(ingredients)) 
     if not ingredients:
-        return False, "Please provide at least one ingredient.", []
+        return False, "Please provide at least one ingredient."
     return True, ""
 
 def validate_instructions(instructions: str):
@@ -85,8 +141,17 @@ def format_instructions(steps: list):
     """ transforming a list of steps into a numbered string and removing empty steps"""
     return "\n".join(f"{i+1}. {step.strip()}" for i, step in enumerate(steps) if step.strip())
 
+def process_new_recipe_form(form_data):
+    """ processing and validating new recipe form data"""
+    name = form_data.get("name", "").title().strip()
+    raw_ingredients = form_data.get("ingredients", "")
+    steps = form_data.getlist("instructions[]")
 
-    # ---------- API_CLIENT.PY----------
+    valid, msg, ingredients, instructions = validate_recipe_form(name, raw_ingredients, steps)
+    return valid, msg, ingredients, instructions
+
+
+    # ---------- FOR API_CLIENT.PY----------
 
 import inflect
 import re
@@ -146,3 +211,112 @@ def clean_instructions(raw_instructions: str):
     steps = [re.sub(r'[^\w\s,.()/-]', '', step).strip() for step in steps if step.strip()]
 
     return steps
+
+def prepare_ingredient_query(user_ingredients):
+    """ preparing a normalized, comma-separated ingredient string for API queries"""
+    normalized = [normalize_ingredient(i) for i in user_ingredients if i.strip()]
+    return ",".join(normalized)
+
+import json
+def get_recipes_from_cache(ingredients_str):
+    """ retrieving cached recipes for a given ingredient query"""
+    cached = get_cached_response(ingredients_str)
+    if not cached:
+        return None
+    try:
+        return json.loads(cached)
+    except Exception:
+        return None
+
+def build_api_params(ingredients_str, limit, config):
+    """ building parameters for API request"""
+    return {"ingredients": ingredients_str, "number": limit*2, "apiKey": config["API_KEY"]}
+
+import requests
+def fetch_recipes_from_api(ingredients_str, limit, config, requester=requests):
+    """ fetching recipes from external API"""
+    response = requester.get(config["API_URL"], params={"ingredients": ingredients_str, "number": limit*2, "apiKey": config["API_KEY"]})
+    if response.status_code != 200:
+        return []
+
+    recipes_data = response.json()
+    recipes = []
+    for recipe in recipes_data:
+        recipe_id = recipe["id"]
+        details_resp = requester.get(config["RECIPE_DETAILS_URL"].format(id=recipe_id), params={"apiKey": config["API_KEY"]})
+        details = details_resp.json() if details_resp.status_code == 200 else None
+        recipes.append(build_recipe_dict(recipe, details))
+    return recipes
+
+def save_recipes_to_cache(ingredients_str, recipes):
+    """ saving fetched recipes to cache"""
+    save_cached_response(ingredients_str, json.dumps(recipes))
+
+def fetch_recipe_details(recipe_id, config, requester=requests):
+    """
+    fetching full details for a single recipe by ID
+    """
+    response = requester.get(
+        config["RECIPE_DETAILS_URL"].format(id=recipe_id),
+        params={"apiKey": config["API_KEY"]}
+    )
+    if response.status_code != 200:
+        return None
+    return response.json()
+
+def build_recipe_details(recipe_id, details):
+    """ building recipe details dict from API response"""
+    if not details:
+        return None
+
+    image = details.get("image")
+    if image:
+        image = image.strip()
+    else:
+        image = None
+
+    return {
+        "id": recipe_id,
+        "name": details.get("title", "No name"),
+        "ingredients": [normalize_ingredient(ing["name"]) for ing in details.get("extendedIngredients", [])],
+        "instructions": clean_instructions(details.get("instructions", "")),
+        "image": image,
+        "sourceUrl": details.get("sourceUrl", "")
+    }
+
+def fetch_ingredient_suggestions_from_api(query, config, requester=requests):
+    """
+    fetching ingredient suggestions based on user input from external API
+    """
+    try:
+        response = requester.get(
+            config["INGREDIENT_AUTOCOMPLETE_URL"],
+            params={"query": query, "number": 10, "apiKey": config["API_KEY"]}
+        )
+        if response.status_code == 200:
+            return [normalize_ingredient(item["name"]) for item in response.json()]
+    except Exception as e:
+        print(f"Error fetching ingredient suggestions from API: {e}")
+    return []
+
+def get_ingredient_suggestions_from_cache(query, ingredient_cache):
+    """ retrieving ingredient suggestions from in-memory cache"""
+    return ingredient_cache.get(query)
+
+def save_ingredient_suggestions_to_cache(query, suggestions, ingredient_cache):
+    """ saving ingredient suggestions to in-memory cache"""
+    ingredient_cache[query] = suggestions
+
+
+    # ----------__INIT__.PY----------
+
+def init_cache(app):
+    """ initializing in-memory caches for recipes and ingredients """
+    caches = {
+        "recipe_cache": {},
+        "ingredient_cache": {}
+    }
+
+    for name, cache in caches.items():
+        if not hasattr(app, name):
+            setattr(app, name, cache)
