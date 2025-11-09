@@ -86,13 +86,12 @@ def get_processed_recipes(user_ingredients, sort_by, cache):
     """
     key = build_cache_key(user_ingredients)
     if key in cache:
-        return cache[key]
-
-    api_results = search_recipes(user_ingredients)
-    recipes = matching_missing_for_recipe(user_ingredients, api_results)
-    cache[key] = recipes
-
-    return sort_recipes(recipes, sort_by)
+        recipes = cache[key]
+    else:
+        api_results = search_recipes(user_ingredients)
+        recipes = matching_missing_for_recipe(user_ingredients, api_results)
+        cache[key] = recipes
+    return sort_recipes(recipes.copy(), sort_by)
 
 def fetch_recipe_or_404(recipe_id):
     from .api_client import get_recipe_details

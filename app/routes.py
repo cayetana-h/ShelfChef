@@ -1,13 +1,9 @@
 from flask import render_template, request, redirect, url_for, jsonify, flash, current_app, Blueprint
-from .storage import (
-    get_user_recipes, save_user_recipe, get_user_recipe,
-    update_user_recipe, delete_user_recipe
-    )
-from .api_client import search_recipes, get_recipe_details, get_ingredient_suggestions
+from .api_client import get_ingredient_suggestions
+from .storage import RecipeStorage
+
 from .utils import (
-    normalize_ingredients, build_cache_key, matching_missing_for_recipe, 
-    sort_recipes, validate_name, validate_ingredients, validate_instructions, 
-    format_instructions, validate_recipe_form, get_processed_recipes, 
+    normalize_ingredients,get_processed_recipes, 
     fetch_recipe_or_404, process_new_recipe_form, extract_api_recipe_form
     )
 
@@ -63,7 +59,7 @@ def recipe_detail(recipe_id):
 
 @bp.route('/my_recipes')
 def my_recipes():
-    recipes = get_user_recipes()
+    recipes = RecipeStorage.get_user_recipes()
     return render_template("my_recipes.html", recipes=recipes)
 
 @bp.route('/my_recipes/new', methods=['GET', 'POST'])
@@ -77,7 +73,7 @@ def new_recipe():
             flash(msg, "error")
             return render_template("recipe_form.html", recipe=None)
 
-        save_user_recipe(request.form.get("name", "").title().strip(), ingredients, instructions, source="user", api_id=None)
+        RecipeStorage.save_user_recipe(request.form.get("name", "").title().strip(), ingredients, instructions, source="user", api_id=None)
 
         flash("Recipe added successfully!", "success")
         return redirect(url_for("main.my_recipes"))
@@ -90,7 +86,7 @@ def edit_recipe(recipe_id):
     """
     displaying the edit form and updating a user's recipe (valdiation)
     """
-    recipe = get_user_recipe(recipe_id)
+    recipe = RecipeStorage.get_user_recipe(recipe_id)
     if not recipe:
         return "Recipe not found", 404
 
@@ -106,7 +102,7 @@ def edit_recipe(recipe_id):
             flash(msg, "error")
             return render_template("recipe_form.html", recipe=recipe)
 
-        updated = update_user_recipe(recipe_id, name, ingredients, instructions)
+        updated = RecipeStorage.update_user_recipe(recipe_id, name, ingredients, instructions)
         if not updated:
             flash("Unable to update recipe.", "error")
             return render_template("recipe_form.html", recipe=recipe)
@@ -116,7 +112,7 @@ def edit_recipe(recipe_id):
 
 @bp.route('/my_recipes/<int:recipe_id>/delete', methods=['POST'])
 def delete_recipe(recipe_id):
-    delete_user_recipe(recipe_id)
+    RecipeStorage.delete_user_recipe(recipe_id)
     return redirect(url_for('main.my_recipes'))
 
 # ---------- API Save (saving an API result into DB) ----------
@@ -129,7 +125,7 @@ def save_recipe():
         flash(msg, "error")
         return redirect(request.referrer or url_for("home"))
 
-    save_user_recipe(name, ingredients, instructions, source="api", api_id=api_id)
+    RecipeStorage.save_user_recipe(name, ingredients, instructions, source="api", api_id=api_id)
     return redirect(url_for("main.my_recipes"))
 
 
