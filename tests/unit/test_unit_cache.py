@@ -11,7 +11,7 @@ class FakeCache:
         return self.store.get(key, default)
 
 
-# ---------- Basic store and retrieve ----------
+# ---------- storing and retrieving tests ----------
 def test_cache_store_and_retrieve():
     cache = FakeCache()
 
@@ -26,11 +26,10 @@ def test_cache_store_and_retrieve():
     assert cache.get("last_results") == recipes
     assert cache.get("last_ingredients") == ingredients
     assert cache.get("last_sort") == sort_by
-
     assert cache.get("unknown_key", 42) == 42
 
 
-# ---------- Overwriting existing values ----------
+# ---------- overwriting existing values ----------
 def test_cache_overwrite():
     cache = FakeCache()
     cache.set("key", "value1")
@@ -38,7 +37,7 @@ def test_cache_overwrite():
     assert cache.get("key") == "value2"
 
 
-# ---------- Storing different types ----------
+# ---------- storing different types ----------
 def test_cache_various_types():
     cache = FakeCache()
     cache.set("int", 123)
@@ -50,7 +49,7 @@ def test_cache_various_types():
     assert cache.get("dict") == {"a": 1}
 
 
-# ---------- Clearing the cache ----------
+# ---------- clearing the cache ----------
 def test_cache_clear():
     cache = FakeCache()
     cache.set("key", "value")
@@ -58,7 +57,7 @@ def test_cache_clear():
     assert cache.get("key") is None
 
 
-# ---------- Default values for missing keys ----------
+# ---------- default values for missing keys ----------
 def test_cache_default_for_missing():
     cache = FakeCache()
     assert cache.get("missing", default="default") == "default"
