@@ -1,4 +1,4 @@
-# 🥘 ShelfChef
+# ShelfChef
 
 ShelfChef is a recipe-finding web app that helps you cook with what you already have in your kitchen.  
 Enter your available ingredients, and ShelfChef will suggest recipes by integrating with the Spoonacular API.  
