@@ -2,7 +2,10 @@ import os
 
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-key")
-    DATABASE = os.getenv("DATABASE_URL", "sqlite:///shelfchef.db")
+    SQLALCHEMY_DATABASE_URI = os.getenv(
+        "DATABASE_URL",
+        "sqlite:///shelfchef.db"  # fallback for local development
+    )
 
     API_KEY = os.getenv("API_KEY", "demo-key")  
     API_URL = "https://api.spoonacular.com/recipes/findByIngredients"
