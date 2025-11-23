@@ -127,6 +127,18 @@ It also supports saving your own recipes locally, caching API results for faster
 3. Run `open htmlcov/index.html ` for a detailed coverage report
     - The project requires at least 70% coverage
 
+## Monitoring/Health
+
+To check the app’s status and exposed metrics:
+
+1. Run `python -m flask run`
+2. Open in your browser `http://127.0.0.1:5000`: 
+  - Monitoring endpointL=: `http://127.0.0.1:5000\metrics`
+    - Displays Prometheus-compatible metrics (request counts, latencies, errors). 
+  - Health endpoint: `http://127.0.0.1:5000\health`
+    - Returns a JSON response like: {"details":{"app":"ok","database":"ok"},"status":"ok"}
+
+
 ## Troubleshooting
 
 **Issue: API rate limit exceeded**
@@ -143,3 +155,4 @@ It also supports saving your own recipes locally, caching API results for faster
 **Issue: Azure deployment stopped**
 - You may see: `"Error 403 - This web app is stopped."`
 - This happens if the Azure app service is not running.
+
