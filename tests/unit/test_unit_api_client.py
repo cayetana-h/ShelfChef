@@ -3,6 +3,28 @@ from unittest.mock import patch, MagicMock
 from app import api_client, create_app
 
 
+@pytest.fixture
+def app():
+    """Create a Flask app for tests and disable Prometheus metrics duplication."""
+    app = create_app(testing=True)
+
+    try:
+        if 'app_info' in app.extensions['prometheus_metrics']._registry._names_to_collectors:
+            del app.extensions['prometheus_metrics']._registry._names_to_collectors['app_info']
+    except KeyError:
+        pass
+
+    return app
+
+@pytest.fixture
+def app_context(app):
+    """Provide app context for tests that need it."""
+    with app.app_context():
+        yield app
+
+
+# ------------------- Tests ------------------- #
+
 @pytest.mark.parametrize(
     "input_text, expected",
     [
@@ -32,7 +54,6 @@ def test_normalize_ingredient_extended(input_text, expected):
 @patch("app.api_client.fetch_recipes_from_api")
 @patch("app.api_client.save_recipes_to_cache")
 def test_search_recipes_success(mock_save, mock_api, mock_cache):
-    """ testing search_recipes retrieves from cache when available """
     mock_cache.return_value = [{"id": 1, "missing_ingredients": 0}]
     mock_config = {"SPOONACULAR_API_KEY": "test_key"}
     recipes = api_client.search_recipes(["cheese", "tomato"], config=mock_config)
@@ -41,11 +62,11 @@ def test_search_recipes_success(mock_save, mock_api, mock_cache):
     mock_api.assert_not_called()
     mock_save.assert_not_called()
 
+
 @patch("app.api_client.get_recipes_from_cache")
 @patch("app.api_client.fetch_recipes_from_api")
 @patch("app.api_client.save_recipes_to_cache")
 def test_search_recipes_api_call(mock_save, mock_api, mock_cache):
-    """testing search_recipes fetches from API and caches results when cache miss"""
     mock_cache.return_value = None
     mock_api.return_value = [
         {"id": 1, "missing_ingredients": 1},
@@ -61,7 +82,6 @@ def test_search_recipes_api_call(mock_save, mock_api, mock_cache):
 # ------ get_recipe_details tests ------- #
 @patch("app.api_client.fetch_recipe_details")
 def test_get_recipe_details_success(mock_fetch):
-    """testing get_recipe_details processes API response correctly"""
     mock_fetch.return_value = {
         "title": "Salad",
         "instructions": "Mix it",
@@ -76,9 +96,9 @@ def test_get_recipe_details_success(mock_fetch):
     assert "lettuce" in result["ingredients"]
     assert result["image"] == "salad.png"  
 
+
 @patch("app.api_client.fetch_recipe_details")
 def test_get_recipe_details_failure(mock_fetch):
-    """testing get_recipe_details handles API failure gracefully"""
     mock_fetch.return_value = None
     mock_config = {"SPOONACULAR_API_KEY": "test_key"}
     
@@ -91,28 +111,23 @@ def test_get_recipe_details_failure(mock_fetch):
 @patch("app.api_client.get_common_ingredients_from_db")
 @patch("app.api_client.fetch_ingredient_suggestions_from_api")
 @patch("app.api_client.get_ingredient_suggestions_from_cache")
-def test_get_ingredient_suggestions_api_fallback(mock_cache, mock_api, mock_db, mock_save):
-    """testing ingredient suggestions falls back to API when cache and DB miss"""
-    app = create_app()
-    with app.app_context():
-        app.ingredient_cache = {}
-        mock_cache.return_value = None
-        mock_db.return_value = []
-        mock_api.return_value = ["cucumber", "carrot"]
-        
-        suggestions = api_client.get_ingredient_suggestions("cu")
-        assert "cucumber" in suggestions
-        assert "carrot" in suggestions
-        mock_api.assert_called_once()
+def test_get_ingredient_suggestions_api_fallback(mock_cache, mock_api, mock_db, mock_save, app_context):
+    app_context.ingredient_cache = {}
+    mock_cache.return_value = None
+    mock_db.return_value = []
+    mock_api.return_value = ["cucumber", "carrot"]
+    
+    suggestions = api_client.get_ingredient_suggestions("cu")
+    assert "cucumber" in suggestions
+    assert "carrot" in suggestions
+    mock_api.assert_called_once()
+
 
 @patch("app.api_client.get_common_ingredients_from_db")
-def test_get_ingredient_suggestions_empty_query(mock_db):
-    """testing ingredient suggestions with empty query returns all from DB"""
-    app = create_app()
-    with app.app_context():
-        app.ingredient_cache = {}
-        mock_db.return_value = ["salt", "pepper"]
-        
-        suggestions = api_client.get_ingredient_suggestions("")
-        assert "salt" in suggestions
-        assert "pepper" in suggestions
+def test_get_ingredient_suggestions_empty_query(mock_db, app_context):
+    app_context.ingredient_cache = {}
+    mock_db.return_value = ["salt", "pepper"]
+    
+    suggestions = api_client.get_ingredient_suggestions("")
+    assert "salt" in suggestions
+    assert "pepper" in suggestions

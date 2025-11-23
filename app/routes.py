@@ -139,14 +139,18 @@ def ingredient_suggestions():
     return jsonify(suggestions)
 
 # ---------- health check ----------
+from sqlalchemy import text
+
 health_bp = Blueprint("health", __name__)
 
 @health_bp.route("/health", methods=["GET"])
 def health_check():
     status = {"app": "ok"}
+
     try:
-        conn = db.session.bind
-        conn.execute("SELECT 1")
+        # Use a session and wrap raw SQL in text()
+        with db.session() as session:
+            session.execute(text("SELECT 1"))
         status["database"] = "ok"
     except Exception as e:
         status["database"] = "error"

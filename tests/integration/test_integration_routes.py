@@ -10,7 +10,7 @@ from unittest.mock import patch, MagicMock
 @pytest.fixture
 def client():
     """Create a test client for the Flask app"""
-    app = create_app()
+    app = create_app(testing=True)
     return app.test_client()
 
 

@@ -13,3 +13,5 @@ psycopg2-binary
 
 Flask-SQLAlchemy==3.0.5
 psycopg2-binary==2.9.7
+
+prometheus-flask-exporter>=0.20.0
