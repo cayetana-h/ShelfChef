@@ -64,7 +64,7 @@ It also supports saving your own recipes locally, caching API results for faster
 - **Create your own recipes** → store your personal recipes and manage them (create, read, update, delete)
 - **Caching system** → reduces API calls by storing recipe results locally 
 - **Ingredient suggestions** → autocomplete-style suggestions when typing ingredients
-- **Choose sorting preference** → most matched ingredients, least missing ingredinets, or default (weighted)
+- **Choose sorting preference** → most matched ingredients, least missing ingredients, or default (weighted)
 - **Simple & clean interface** → built with Flask templates
 
 
@@ -122,9 +122,9 @@ It also supports saving your own recipes locally, caching API results for faster
 
 1. Activate your virtual environment 
 2. Run `PYTHONPATH=$(pwd) python -m pytest tests/ -v --cov=app --cov-report=html --cov-fail-under=70` 
-    - Only integration tests `PYTHONPATH=$(pwd) python -m pytest tests/integration -v`
-    - Only unit tests `PYTHONPATH=$(pwd) python -m pytest tests/unit -v`
-3. Run `open htmlcov/index.html ` for a detailed coverage report
+    - Only integration tests `PYTHONPATH=$(pwd) pytest tests/integration/ -v`
+    - Only unit tests `PYTHONPATH=$(pwd) pytest tests/unit/ -v`
+3. Run `open htmlcov/index.html ` or `xdg-open htmlcov/index.html` for a detailed coverage report
     - The project requires at least 70% coverage
 
 ## Monitoring/Health
