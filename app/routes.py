@@ -1,6 +1,6 @@
 from flask import render_template, request, redirect, url_for, jsonify, flash, current_app, Blueprint
 from .api_client import get_ingredient_suggestions
-from .storage import RecipeStorage
+from .storage import RecipeStorage, db
 
 from .utils import (
     normalize_ingredients,get_processed_recipes, 
@@ -137,3 +137,24 @@ def ingredient_suggestions():
     query = request.args.get("query", "").strip()
     suggestions = get_ingredient_suggestions(query)
     return jsonify(suggestions)
+
+# ---------- health check ----------
+health_bp = Blueprint("health", __name__)
+
+@health_bp.route("/health", methods=["GET"])
+def health_check():
+    status = {"app": "ok"}
+    try:
+        conn = db.session.bind
+        conn.execute("SELECT 1")
+        status["database"] = "ok"
+    except Exception as e:
+        status["database"] = "error"
+        status["db_error"] = str(e)
+
+    healthy = all(v == "ok" for v in status.values() if isinstance(v, str))
+
+    return jsonify({
+        "status": "ok" if healthy else "error",
+        "details": status
+    }), 200 if healthy else 500
