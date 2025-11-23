@@ -72,10 +72,17 @@ This report summarizes the improvements, refactoring, testing, CI/CD, database c
 ## 7. Continuous Deployment (CD)
 
 - **Azure Deployment**:
-  - Backend updated for cloud-ready configuration using environment variables.
-  - GitHub Secrets for CI/CD; Azure App Settings for production.
-- **Publish profile** used instead of blocked Service Principal workflow.
-- Workflow:
+  - Backend configured for cloud readiness using environment variables.
+  - GitHub Secrets used for CI/CD; Azure App Settings used in production.
+
+- **Publish Profile**:
+  - Used for deployment instead of the blocked Service Principal workflow.
+  - Allows GitHub Actions to deploy Docker image to Azure without requiring additional Azure permissions.
+
+- **Workflow**:
+  - Two jobs: 
+    1. `build-and-test` → runs tests, measures coverage, uploads HTML coverage report.
+    2. `docker-build-and-deploy` → builds and pushes Docker image to Docker Hub, then deploys to Azure using the publish profile. Deployment triggers only on pushes to the `main` branch.
   ```yaml
   uses: azure/webapps-deploy@v2
   with:
