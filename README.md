@@ -68,16 +68,33 @@ It also supports saving your own recipes locally, caching API results for faster
 - **Simple & clean interface** → built with Flask templates
 
 
-## Tools
-- **Backend:** Python, Flask
-- **Database:** PostgreSQL (locally SQLite for dev/testing)
-- **Frontend:** HTML (Jinja2) + CSS
-- **External API:** Spoonacular
-- **Testing:** Pytest (unit & integration tests, ≥70% coverage)
-- **Caching:** Custom SQLite-based cache
-- **Containerization:** Docker
-- **CI/CD:** GitHub Actions (tests, coverage, build, deployment to Azure Container Registry)
-- **Monitoring:** /health endpoint, Prometheus-compatible metrics
+## Tech Stack
+
+**Backend & Framework**
+- Python 3.11 + Flask
+
+**Database**
+- PostgreSQL (Production on Azure)
+- SQLite (Local development/testing)
+
+**Frontend**
+- HTML/CSS with Jinja2 templating
+
+**External APIs**
+- Spoonacular Recipe & Ingredient API
+
+**Testing**
+- pytest with 95% code coverage (176 tests: 99 unit, 77 integration)
+
+**DevOps & Infrastructure**
+- Docker containerization
+- GitHub Actions CI/CD
+- Azure App Service deployment
+- Azure Container Registry
+
+**Monitoring**
+- Custom `/health` endpoint
+- Prometheus-compatible `/metrics` endpoint
 
 
 ## Usage
@@ -101,10 +118,10 @@ It also supports saving your own recipes locally, caching API results for faster
 4. Navigate to `http://localhost:5000` in your browser
     - Optional: Run with Docker:
         `docker build -t shelfchef .`
-        `docker run -p 5000:5000 shelfchef`
+        `docker run -p 8000:8000 shelfchef`
 
 ### Option 2: Access Deployed App 
-1. Navigate to `shelfchef-eeaeeyemgpggdshz.westeurope-01.azurewebsites.net` in your browser
+1. Navigate to [https://shelfchef-eeaeeyemgpggdshz.westeurope-01.azurewebsites.net](https://shelfchef-eeaeeyemgpggdshz.westeurope-01.azurewebsites.net)
     
 
 
@@ -120,12 +137,42 @@ It also supports saving your own recipes locally, caching API results for faster
 
 ## Running Tests
 
-1. Activate your virtual environment 
-2. Run `PYTHONPATH=$(pwd) python -m pytest tests/ -v --cov=app --cov-report=html --cov-fail-under=70` 
-    - Only integration tests `PYTHONPATH=$(pwd) pytest tests/integration/ -v`
-    - Only unit tests `PYTHONPATH=$(pwd) pytest tests/unit/ -v`
-3. Run `open htmlcov/index.html ` or `xdg-open htmlcov/index.html` for a detailed coverage report
-    - The project requires at least 70% coverage
+### Prerequisites
+Ensure you're in the activated virtual environment:
+```bash
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+```
+
+### Run All Tests with Coverage
+```bash
+PYTHONPATH=$(pwd) pytest tests/ -v --cov=app --cov-report=html --cov-fail-under=70
+```
+
+### Run Specific Test Suites
+```bash
+# Unit tests only (fast, isolated)
+python -m pytest tests/unit
+
+# Integration tests only (slower, with database)
+python -m pytest tests/integration
+```
+
+### View Coverage Report
+```bash
+# macOS/Linux
+open htmlcov/index.html
+
+# Windows
+start htmlcov/index.html
+
+# Linux (alternative)
+xdg-open htmlcov/index.html
+```
+
+### Current Coverage: **94.53%** (190 tests)
+- Unit tests: 99
+- Integration tests: 117
+- Minimum required: 70%
 
 ## Monitoring/Health
 
@@ -133,10 +180,10 @@ To check the app’s status and exposed metrics:
 
 1. Run `python -m flask run`
 2. Open in your browser `http://127.0.0.1:5000`: 
-  - Monitoring endpointL=: `http://127.0.0.1:5000\metrics`
+  - Monitoring endpoint=: `http://127.0.0.1:5000\metrics` (local) or `https://shelfchef-[...].azurewebsites.net/metrics` (production)
     - Displays Prometheus-compatible metrics (request counts, latencies, errors). 
-  - Health endpoint: `http://127.0.0.1:5000\health`
-    - Returns a JSON response like: {"details":{"app":"ok","database":"ok"},"status":"ok"}
+  - Health endpoint: `http://127.0.0.1:5000\health` (local) or `https://shelfchef-[...].azurewebsites.net/health` (production)
+    - Returns a JSON response like: {"details":{"app":"ok","database":"ok"},"status":"ok"} 
 
 
 ## Troubleshooting
@@ -154,5 +201,7 @@ To check the app’s status and exposed metrics:
 
 **Issue: Azure deployment stopped**
 - You may see: `"Error 403 - This web app is stopped."`
-- This happens if the Azure app service is not running.
+- The Azure App Service may be paused 
+- Contact the repository maintainer to restart the service
+- Alternatively, run locally following the setup instructions
 
