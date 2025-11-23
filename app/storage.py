@@ -29,7 +29,6 @@ class CachedResponse(db.Model):
 # -------------------- DB INIT --------------------
 
 def init_db(app=None):
-    """Initialize database tables"""
     if app:
         db.init_app(app)
         with app.app_context():
@@ -41,6 +40,7 @@ def init_db(app=None):
 # -------------------- HELPERS --------------------
 
 def _row_to_recipe(recipe: Recipe) -> Dict[str, Any]:
+    """converting recipe row to dict"""
     ingredients_text = recipe.ingredients or ""
     ingredients = [i.strip() for i in ingredients_text.split(",")] if ingredients_text else []
     return {
@@ -60,12 +60,14 @@ class RecipeStorage:
 
     @staticmethod
     def get_user_recipes() -> List[Dict[str, Any]]:
+        """fetching all user recipes from the database"""
         recipes = Recipe.query.order_by(Recipe.id.desc()).all()
         return [_row_to_recipe(r) for r in recipes]
 
     @staticmethod
     def get_user_recipe(recipe_id: int) -> Optional[Dict[str, Any]]:
-        recipe = Recipe.query.get(recipe_id)
+        """fetching a single user recipe by ID"""
+        recipe = db.session.get(Recipe, recipe_id)
         return _row_to_recipe(recipe) if recipe else None
 
     @staticmethod
@@ -84,7 +86,7 @@ class RecipeStorage:
 
     @staticmethod
     def update_user_recipe(recipe_id: int, name: str, ingredients: List[str], instructions: str) -> bool:
-        recipe = Recipe.query.get(recipe_id)
+        recipe = db.session.get(Recipe, recipe_id)
         if not recipe or recipe.source != "user":
             return False
         recipe.name = name
@@ -95,7 +97,7 @@ class RecipeStorage:
 
     @staticmethod
     def delete_user_recipe(recipe_id: int) -> bool:
-        recipe = Recipe.query.get(recipe_id)
+        recipe = db.session.get(Recipe, recipe_id)
         if not recipe or recipe.source != "user":
             return False
         db.session.delete(recipe)
@@ -104,11 +106,11 @@ class RecipeStorage:
 
 
 # -------------------- CACHED RESPONSES --------------------
-
 def get_common_ingredients_from_db() -> List[str]:
+    """fetching common ingredients from local db"""
     ingredients = []
     try:
-        conn = db.session.bind  # get engine
+        conn = db.session.bind  
         result = conn.execute("SELECT name FROM ingredients")
         ingredients = [normalize_ingredient(row[0]) for row in result.fetchall()]
     except Exception:

@@ -211,3 +211,16 @@ def test_ingredient_suggestions(mock_suggest, client):
     assert "tomato" in data
     assert "tofu" in data
     assert len(data) == 3
+
+# ----------- health route tests ------------
+
+def test_health_integration(client):
+    """integration test for /health route"""
+    resp = client.get("/health")
+    data = resp.get_json()
+
+    assert resp.status_code in (200, 500)
+    assert "status" in data
+    assert "details" in data
+    assert "database" in data["details"]
+

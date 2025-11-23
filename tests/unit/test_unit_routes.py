@@ -2,8 +2,6 @@ import pytest
 from unittest.mock import patch, MagicMock
 from app import create_app
 
-import app.routes  
-
 @pytest.fixture
 def app():
     return create_app()
@@ -162,3 +160,18 @@ def test_ingredient_suggestions_returns_json(client):
         resp = client.get("/ingredient_suggestions?query=to")
         assert resp.content_type == "application/json"
         assert isinstance(resp.get_json(), list)
+
+
+# ----------- health route tests ------------
+
+def test_health_unit_ok(client):
+    with patch("app.storage.db.session") as mock_session:
+        mock_conn = mock_session.bind
+        mock_conn.execute.return_value = None
+
+        resp = client.get("/health")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["status"] == "ok"
+    assert data["details"]["database"] == "ok"
