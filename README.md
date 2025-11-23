@@ -5,32 +5,54 @@ Enter your available ingredients, and ShelfChef will suggest recipes by integrat
 
 It also supports saving your own recipes locally, caching API results for faster performance, and managing your personal recipe collection.
 
-## 🗂 Project Structure
+## Project Structure
 
 <pre>
 .
+├── .github
+│   └── workflows
+│       └── cicd.yml
+├── Dockerfile
 ├── README.md
 ├── app
 │   ├── __init__.py
 │   ├── api_client.py
+│   ├── config.py
+│   ├── db_utils.py
 │   ├── routes.py
 │   ├── storage.py
-│   ├── templates
-│   │   ├── index.html
-│   │   ├── my_recipes.html
-│   │   ├── recipe_detail.html
-│   │   ├── recipe_form.html
-│   │   └── results.html
-│   └── utils.py
+│   ├── utils.py
+│   └── templates
+│       ├── index.html
+│       ├── my_recipes.html
+│       ├── recipe_detail.html
+│       ├── recipe_form.html
+│       └── results.html
+├── cached_response.json
+├── check_db.py
+├── combine_to_text.py
 ├── create_db.py
 ├── inspect_db.py
 ├── main.py
 ├── requirements.txt
-└── tests
-    ├── test_api_client.py
-    ├── test_cache.py
-    ├── test_routes.py
-    └── test_storage.py
+├── shelfchef_codebase.txt
+├── tests
+│   ├── integration
+│   │   ├── test_integration_api_client.py
+│   │   ├── test_integration_cache.py
+│   │   ├── test_integration_routes.py
+│   │   ├── test_integration_storage.py
+│   │   └── test_integration_utils.py
+│   └── unit
+│       ├── test_unit_api_client.py
+│       ├── test_unit_cache.py
+│       ├── test_unit_db_utils.py
+│       ├── test_unit_routes.py
+│       ├── test_unit_storage.py
+│       └── test_unit_utils.py
+└── htmlcov
+
+
 </pre>
 
 
@@ -48,16 +70,20 @@ It also supports saving your own recipes locally, caching API results for faster
 
 ## Tools
 - **Backend:** Python, Flask
-- **Database:** SQLite
+- **Database:** PostgreSQL (locally SQLite for dev/testing)
 - **Frontend:** HTML (Jinja2) + CSS
 - **External API:** Spoonacular
-- **Testing:** Pytest
+- **Testing:** Pytest (unit & integration tests, ≥70% coverage)
 - **Caching:** Custom SQLite-based cache
+- **Containerization:** Docker
+- **CI/CD:** GitHub Actions (tests, coverage, build, deployment to Azure Container Registry)
+- **Monitoring:** /health endpoint, Prometheus-compatible metrics
 
 
-## Setup Instructions
+## Usage
 
-### 1. Create and activate your environment
+### Option 1: Run Locally
+1. Create and activate your environment
 `python -m venv venv` or `python3 -m venv venv`
 
 
@@ -66,32 +92,40 @@ It also supports saving your own recipes locally, caching API results for faster
 
 `venv\Scripts\activate        # Windows`
 
-### 2. Install Dependencies
+2. Install Dependencies
 `pip install -r requirements.txt`
 
-### 3. Initialize the database
-`python create_db.py`
+3. Run App
+`python -m flask run`
 
-### 4. Run App
-`python main.py` or `python3 main.py`
+4. Navigate to `http://localhost:5000` in your browser
+    - Optional: Run with Docker:
+        `docker build -t shelfchef .`
+        `docker run -p 5000:5000 shelfchef`
 
-### 5.Running Tests
-`PYTHONPATH=$(pwd) pytest tests     # macOS/Linux`
+### Option 2: Access Deployed App 
+1. Navigate to `shelfchef-eeaeeyemgpggdshz.westeurope-01.azurewebsites.net` in your browser
+    
 
 
-`set PYTHONPATH=%cd% && pytest tests # Windows (PowerShell)`
+## Using the App
+
+1. Enter ingredients you have (e.g., "chicken, rice, tomatoes") one by one
+2. Click "Find Recipes" to see matching recipes
+3. Choose to sort your recipes as you prefer: most matching ingredients, least missing ingredients, or default (a weighted combination!)
+4. Click on any recipe to view full details and instructions
+5. Save your favorite recipes or create your own!
+6. Manage your saved recipes (edit, delete, create) as you wish. Just keep in mind, you can only edit recipes that are yours!
 
 
-## Usage
+## Running Tests
 
-1. Navigate to `http://localhost:5000` in your browser
-2. Enter ingredients you have (e.g., "chicken, rice, tomatoes") one by one
-3. Click "Find Recipes" to see matching recipes
-4. Choose to sort your recipes as you prefer: most matching ingredients, least missing ingredients, or default (a weighted combination!)
-5. Click on any recipe to view full details and instructions
-6. Save your favorite recipes or create your own!
-7. Manage your saved recipes (edit, delete, create) as you wish. Just keep in mind, you can only edit recipes that are yours!
-
+1. Activate your virtual environment 
+2. Run `PYTHONPATH=$(pwd) python -m pytest tests/ -v --cov=app --cov-report=html --cov-fail-under=70` 
+    - Only integration tests `PYTHONPATH=$(pwd) python -m pytest tests/integration -v`
+    - Only unit tests `PYTHONPATH=$(pwd) python -m pytest tests/unit -v`
+3. Run `open htmlcov/index.html ` for a detailed coverage report
+    - The project requires at least 70% coverage
 
 ## Troubleshooting
 
@@ -100,8 +134,12 @@ It also supports saving your own recipes locally, caching API results for faster
 - The app caches results to minimize API calls
 
 **Issue: Database not found**
-- Run `python create_db.py` to initialize the database
+- Run `python create_db.py` to initialize the database (for local run)
 
 **Issue: Module not found errors**
 - Ensure you're in the virtual environment: `source venv/bin/activate`
 - Reinstall dependencies: `pip install -r requirements.txt`
+
+**Issue: Azure deployment stopped**
+- You may see: `"Error 403 - This web app is stopped."`
+- This happens if the Azure app service is not running.
