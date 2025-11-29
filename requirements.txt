@@ -1,3 +1,5 @@
+# Requires Python >=3.10,<3.13
+
 Flask==2.3.2
 Werkzeug<3.0
 requests==2.31.0
@@ -9,7 +11,6 @@ pytest==8.4.2
 pytest-cov==4.1.0
 
 gunicorn
-psycopg2-binary
 
 Flask-SQLAlchemy==3.0.5
 psycopg2-binary==2.9.7
